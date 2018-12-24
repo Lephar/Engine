@@ -1,2 +1,5 @@
-﻿cmake_minimum_required (VERSION 3.8)
+﻿project(Engine)
 add_executable (Engine "Engine.c")
+find_package(Vulkan REQUIRED)
+target_link_libraries(Engine Vulkan::Vulkan)
+target_include_directories(Engine PRIVATE Vulkan::Vulkan)
