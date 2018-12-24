@@ -1,13 +1,12 @@
 ﻿// Engine.cpp : Defines the entry point for the application.
 //
 
-#include "Engine.h"
-
-using namespace std;
+#include <Windows.h>
+#include <stdio.h>
 
 int main()
 {
-	cout << "Hello CMake." << endl;
+	printf("sadsdfsd\n");
 	int a;
 	scanf("%d", &a);
 	return 0;
