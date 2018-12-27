@@ -1,5 +1,6 @@
 ﻿#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 
 #ifndef NDEBUG
@@ -24,6 +25,7 @@ int width, height;
 VkInstance instance;
 VkSurfaceKHR surface;
 VkPhysicalDevice physicalDevice;
+SwapchainDetails swapchainDetails;
 
 #ifndef NDEBUG
 	VkDebugUtilsMessengerEXT messenger;
@@ -58,7 +60,7 @@ void createInstance()
 		const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 		uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
 	#else
-		const char *layerNames[] = NULL;
+		const char **layerNames = NULL;
 		uint32_t layerCount = 0;
 	#endif
 
@@ -172,14 +174,25 @@ void createSurface()
 	#endif
 }
 
-void pickPhysicalDevice() //TODO: Generalize the picking
+SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
+{
+	SwapchainDetails temporaryDetails = {0};
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(temporaryDevice, surface, &temporaryDetails.capabilities);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(temporaryDevice, surface, &temporaryDetails.formatCount, NULL);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(temporaryDevice, surface, &temporaryDetails.modeCount, NULL);
+	temporaryDetails.surfaceFormats = malloc(temporaryDetails.formatCount * sizeof(VkSurfaceFormatKHR));
+	temporaryDetails.presentModes = malloc(temporaryDetails.modeCount * sizeof(VkPresentModeKHR));
+	vkGetPhysicalDeviceSurfaceFormatsKHR(temporaryDevice, surface, &temporaryDetails.formatCount, temporaryDetails.surfaceFormats);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(temporaryDevice, surface, &temporaryDetails.modeCount, temporaryDetails.presentModes);
+	return temporaryDetails;
+}
+
+void pickPhysicalDevice()
 {
 	physicalDevice = VK_NULL_HANDLE;
 
 	uint32_t deviceCount;
 	vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
-
-	printf("Found: %d\n", deviceCount);
 	VkPhysicalDevice *devices = malloc(deviceCount * sizeof(VkPhysicalDevice));
 	vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
 
@@ -187,53 +200,49 @@ void pickPhysicalDevice() //TODO: Generalize the picking
 	{
 		VkPhysicalDeviceProperties deviceProperties;
 		vkGetPhysicalDeviceProperties(devices[deviceIndex], &deviceProperties);
-		printf("%s\n", deviceProperties.deviceName);
+		VkPhysicalDeviceFeatures deviceFeatures;
+		vkGetPhysicalDeviceFeatures(devices[deviceIndex], &deviceFeatures);
 
-		//VkPhysicalDeviceFeatures deviceFeatures;
-		//vkGetPhysicalDeviceFeatures(devices[deviceIndex], &deviceFeatures);
-		/*
-		uint32_t extensionCount, extensionExists = 0;
+		uint32_t extensionCount, swapchainSupport = 0;
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, NULL);
 		VkExtensionProperties *extensionProperties = malloc(extensionCount * sizeof(VkExtensionProperties));
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, extensionProperties);
 		for (uint32_t extensionIndex = 0; extensionIndex < extensionCount; extensionIndex++)
 			if (!strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
-				extensionExists = 1;
-		
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(devices[deviceIndex], surface, &details.capabilities);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(devices[deviceIndex], surface, &details.formatCount, NULL);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(devices[deviceIndex], surface, &details.modeCount, NULL);
-		details.surfaceFormats = malloc(details.formatCount * sizeof(VkSurfaceFormatKHR));
-		details.presentModes = malloc(details.modeCount * sizeof(VkPresentModeKHR));
-		vkGetPhysicalDeviceSurfaceFormatsKHR(devices[deviceIndex], surface, &details.formatCount, details.surfaceFormats);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(devices[deviceIndex], surface, &details.modeCount, details.presentModes);
+				swapchainSupport = 1;
+		free(extensionProperties);
 
-		if (extensionExists && details.formatCount && details.modeCount && deviceFeatures.geometryShader
-			&& deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		SwapchainDetails temporaryDetails = {0};
+		if(swapchainSupport && deviceFeatures.geometryShader
+		  && deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			temporaryDetails = generateSwapchainDetails(devices[deviceIndex]);
+
+		if(temporaryDetails.formatCount && temporaryDetails.modeCount)
 		{
+			swapchainDetails = temporaryDetails;
 			physicalDevice = devices[deviceIndex];
-			printf("Picked Physical Device! (Index: %d)\n", deviceIndex);
+			printf("Picked Physical Device: %s\n", deviceProperties.deviceName);
 			break;
 		}
+
 		else
 		{
-			details.capabilities = (VkSurfaceCapabilitiesKHR) { 0 };
-			details.formatCount = 0;
-			details.modeCount = 0;
-			free(details.surfaceFormats);
-			free(details.presentModes);
-		}*/
+			free(temporaryDetails.surfaceFormats);
+			free(temporaryDetails.presentModes);
+		}
 	}
+
+	free(devices);
 }
 
 void setup()
 {
 	createInstance();
 	#ifndef NDEBUG
-//		registerMessenger();
+		registerMessenger();
 	#endif
-//	createWindow();
-//	createSurface();
+	createWindow();
+	createSurface();
 	pickPhysicalDevice();
 }
 
@@ -273,6 +282,9 @@ void draw()
 				{
 					width = ((xcb_resize_request_event_t*)event)->width;
 					height = ((xcb_resize_request_event_t*)event)->height;
+					free(swapchainDetails.surfaceFormats);
+					free(swapchainDetails.presentModes);
+					swapchainDetails = generateSwapchainDetails;
 					continue;
 				}
 				else if((event->response_type & ~0x80) == XCB_CLIENT_MESSAGE &&
@@ -287,7 +299,7 @@ void draw()
 
 void clean()
 {
-/*	vkDestroySurfaceKHR(instance, surface, NULL);
+	vkDestroySurfaceKHR(instance, surface, NULL);
 	#ifdef __linux__
 		free(event);
 		xcb_destroy_window(xconn, window);
@@ -298,14 +310,13 @@ void clean()
 		  (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 		if (destroyMessenger != NULL)
 			destroyMessenger(instance, messenger, NULL);
-	#endif*/
+	#endif
 	vkDestroyInstance(instance, NULL);
 }
 
 int main()
 {
 	setup();
-//	draw();
+	draw();
 	clean();
-//	getch();
 }
