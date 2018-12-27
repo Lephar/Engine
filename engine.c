@@ -26,6 +26,9 @@ VkInstance instance;
 VkSurfaceKHR surface;
 VkPhysicalDevice physicalDevice;
 SwapchainDetails swapchainDetails;
+uint32_t presentIndex, graphicsIndex;
+VkQueue presentQueue, graphicsQueue;
+VkDevice device;
 
 #ifndef NDEBUG
 	VkDebugUtilsMessengerEXT messenger;
@@ -208,8 +211,13 @@ void pickPhysicalDevice()
 		VkExtensionProperties *extensionProperties = malloc(extensionCount * sizeof(VkExtensionProperties));
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, extensionProperties);
 		for (uint32_t extensionIndex = 0; extensionIndex < extensionCount; extensionIndex++)
+		{
 			if (!strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+			{
 				swapchainSupport = 1;
+				break;
+			}
+		}
 		free(extensionProperties);
 
 		SwapchainDetails temporaryDetails = {0};
@@ -235,6 +243,81 @@ void pickPhysicalDevice()
 	free(devices);
 }
 
+void createLogicalDevice()
+{
+	graphicsIndex = presentIndex = -1;
+	graphicsQueue = presentQueue = VK_NULL_HANDLE;
+
+	uint32_t queueCount;
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueCount, NULL);
+	VkQueueFamilyProperties *queueProperties = malloc(queueCount * sizeof(VkQueueFamilyProperties));
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueCount, queueProperties);
+
+	for (uint32_t queueIndex = 0; queueIndex < queueCount; queueIndex++)
+	{
+		VkBool32 presentSupport = VK_FALSE;
+		vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueIndex, surface, &presentSupport);
+		if (queueProperties[queueIndex].queueCount > 0 && presentSupport)
+			presentIndex = queueIndex;
+		if (queueProperties[queueIndex].queueCount > 0 && queueProperties[queueIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			graphicsIndex = queueIndex;
+	}
+
+	float queuePriority = 1.0f;
+	queueCount = graphicsIndex == presentIndex ? 1 : 2; 
+	VkDeviceQueueCreateInfo *queueList = malloc(queueCount * sizeof(VkDeviceQueueCreateInfo));
+
+	VkDeviceQueueCreateInfo graphicsInfo = { 0 };
+	graphicsInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	graphicsInfo.queueCount = 1;
+	graphicsInfo.queueFamilyIndex = graphicsIndex;
+	graphicsInfo.pQueuePriorities = &queuePriority;
+	queueList[0] = graphicsInfo;
+	
+	if(queueCount == 2)
+	{
+		VkDeviceQueueCreateInfo presentInfo = { 0 };
+		presentInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		presentInfo.queueCount = 1;
+		presentInfo.queueFamilyIndex = presentIndex;
+		presentInfo.pQueuePriorities = &queuePriority;
+		queueList[1] = presentInfo;
+	}
+
+	VkPhysicalDeviceFeatures deviceFeatures = { 0 };
+
+	#ifndef DEBUG
+		const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
+		uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
+	#else
+		const char **layerNames = NULL;
+		uint32_t layerCount = 0;
+	#endif
+
+	const char *extensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
+
+	VkDeviceCreateInfo deviceInfo = { 0 };
+	deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	deviceInfo.enabledLayerCount = layerCount;
+	deviceInfo.ppEnabledLayerNames = layerNames;
+	deviceInfo.enabledExtensionCount = extensionCount;
+	deviceInfo.ppEnabledExtensionNames = extensionNames;
+	deviceInfo.pEnabledFeatures = &deviceFeatures;
+	deviceInfo.queueCreateInfoCount = queueCount;
+	deviceInfo.pQueueCreateInfos = queueList;
+	
+	if (vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device) == VK_SUCCESS)
+		printf("Created Logical Device: Queue Count %d\n", deviceInfo.queueCreateInfoCount);
+	vkGetDeviceQueue(device, graphicsIndex, 0, &graphicsQueue);
+	if (graphicsIndex != -1 && graphicsQueue != VK_NULL_HANDLE)
+		printf("Acquired Graphics Queue Handle: Index %d\n", graphicsIndex);
+	vkGetDeviceQueue(device, presentIndex, 0, &presentQueue);
+	if (presentIndex != -1 && presentQueue != VK_NULL_HANDLE)
+		printf("Acquired Presentation Queue Handle: Index %d\n", presentIndex);
+	free(queueList);
+}
+
 void setup()
 {
 	createInstance();
@@ -244,6 +327,7 @@ void setup()
 	createWindow();
 	createSurface();
 	pickPhysicalDevice();
+	createLogicalDevice();
 }
 
 #ifdef _WIN32
@@ -299,9 +383,9 @@ void draw()
 
 void clean()
 {
+	vkDestroyDevice(device, NULL);
 	vkDestroySurfaceKHR(instance, surface, NULL);
 	#ifdef __linux__
-		free(event);
 		xcb_destroy_window(xconn, window);
 		xcb_disconnect(xconn);
 	#endif

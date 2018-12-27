@@ -234,3 +234,10 @@ void printPhysicalDeviceFeatures(VkPhysicalDeviceFeatures features)
 	printf("variableMultisampleRate: %d\n", features.variableMultisampleRate);
 	printf("inheritedQueries: %d\n", features.inheritedQueries);
 }
+
+void printExtensionProperties(VkExtensionProperties *extensions, uint32_t count)
+{
+	printf("Extension Count: %u\n", count);
+	for (uint32_t i = 0; i < count; i++)
+		printf("%s %u\n", extensions[i].extensionName, extensions[i].specVersion);
+}
