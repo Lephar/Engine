@@ -13,8 +13,6 @@
 	#include <vulkan/vulkan_xcb.h>
 #endif
 
-__declspec(dllexport) uint32_t nvOptimusEnablement = 0x00000001;
-
 struct swapchainDetails {
 	VkSurfaceCapabilitiesKHR capabilities;
 	uint32_t formatCount, modeCount;
@@ -72,6 +70,8 @@ void createInstance()
 
 	const char *extensionNames[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 	  VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURFACE_NAME};
+//	const char *extensionNames[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+//	  VK_KHR_SURFACE_EXTENSION_NAME};
 	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
 	
 	VkInstanceCreateInfo instanceInfo = {0};
@@ -176,15 +176,9 @@ void pickPhysicalDevice() //TODO: Generalize the picking
 {
 	physicalDevice = VK_NULL_HANDLE;
 
-	uint32_t deviceGroupCount;
-	vkEnumeratePhysicalDeviceGroups(instance, &deviceGroupCount, NULL);
-	printf("group %d\n", deviceGroupCount);
-	VkPhysicalDeviceGroupProperties *deviceGroup = malloc(deviceGroupCount * sizeof(VkPhysicalDeviceGroupProperties));
-	vkEnumeratePhysicalDeviceGroups(instance, &deviceGroupCount, deviceGroup);
-	printf("%d\n", deviceGroup[0].physicalDeviceCount);
-
 	uint32_t deviceCount;
 	vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+
 	printf("Found: %d\n", deviceCount);
 	VkPhysicalDevice *devices = malloc(deviceCount * sizeof(VkPhysicalDevice));
 	vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
@@ -195,9 +189,9 @@ void pickPhysicalDevice() //TODO: Generalize the picking
 		vkGetPhysicalDeviceProperties(devices[deviceIndex], &deviceProperties);
 		printf("%s\n", deviceProperties.deviceName);
 
-		VkPhysicalDeviceFeatures deviceFeatures;
-		vkGetPhysicalDeviceFeatures(devices[deviceIndex], &deviceFeatures);
-
+		//VkPhysicalDeviceFeatures deviceFeatures;
+		//vkGetPhysicalDeviceFeatures(devices[deviceIndex], &deviceFeatures);
+		/*
 		uint32_t extensionCount, extensionExists = 0;
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, NULL);
 		VkExtensionProperties *extensionProperties = malloc(extensionCount * sizeof(VkExtensionProperties));
@@ -205,7 +199,7 @@ void pickPhysicalDevice() //TODO: Generalize the picking
 		for (uint32_t extensionIndex = 0; extensionIndex < extensionCount; extensionIndex++)
 			if (!strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
 				extensionExists = 1;
-		/*
+		
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(devices[deviceIndex], surface, &details.capabilities);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(devices[deviceIndex], surface, &details.formatCount, NULL);
 		vkGetPhysicalDeviceSurfacePresentModesKHR(devices[deviceIndex], surface, &details.modeCount, NULL);
@@ -236,10 +230,10 @@ void setup()
 {
 	createInstance();
 	#ifndef NDEBUG
-		registerMessenger();
+//		registerMessenger();
 	#endif
-	//createWindow();
-	//createSurface();
+//	createWindow();
+//	createSurface();
 	pickPhysicalDevice();
 }
 
@@ -293,7 +287,7 @@ void draw()
 
 void clean()
 {
-	vkDestroySurfaceKHR(instance, surface, NULL);
+/*	vkDestroySurfaceKHR(instance, surface, NULL);
 	#ifdef __linux__
 		free(event);
 		xcb_destroy_window(xconn, window);
@@ -304,14 +298,14 @@ void clean()
 		  (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 		if (destroyMessenger != NULL)
 			destroyMessenger(instance, messenger, NULL);
-	#endif
+	#endif*/
 	vkDestroyInstance(instance, NULL);
 }
 
 int main()
 {
 	setup();
-	//draw();
+//	draw();
 	clean();
-	getch();
+//	getch();
 }
