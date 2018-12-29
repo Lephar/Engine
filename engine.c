@@ -26,9 +26,15 @@ VkInstance instance;
 VkSurfaceKHR surface;
 VkPhysicalDevice physicalDevice;
 SwapchainDetails swapchainDetails;
+VkDevice device;
 uint32_t presentIndex, graphicsIndex;
 VkQueue presentQueue, graphicsQueue;
-VkDevice device;
+uint32_t swapchainImageCount;
+VkSwapchainKHR swapchain;
+VkFormat swapchainFormat;
+VkExtent2D swapchainExtent;
+VkImage *swapchainImages;
+VkImageView *swapchainViews;
 
 #ifndef NDEBUG
 	VkDebugUtilsMessengerEXT messenger;
@@ -194,7 +200,9 @@ void pickPhysicalDevice()
 {
 	physicalDevice = VK_NULL_HANDLE;
 
+	int32_t maxScore = -1, bestIndex = -1;
 	uint32_t deviceCount;
+	char *deviceName = malloc(VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
 	vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
 	VkPhysicalDevice *devices = malloc(deviceCount * sizeof(VkPhysicalDevice));
 	vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
@@ -202,44 +210,45 @@ void pickPhysicalDevice()
 	for (uint32_t deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++)
 	{
 		VkPhysicalDeviceProperties deviceProperties;
-		vkGetPhysicalDeviceProperties(devices[deviceIndex], &deviceProperties);
 		VkPhysicalDeviceFeatures deviceFeatures;
-		vkGetPhysicalDeviceFeatures(devices[deviceIndex], &deviceFeatures);
+		uint32_t extensionCount, formatCount, modeCount, swapchainSupport = 0;
 
-		uint32_t extensionCount, swapchainSupport = 0;
+		vkGetPhysicalDeviceProperties(devices[deviceIndex], &deviceProperties);
+		vkGetPhysicalDeviceFeatures(devices[deviceIndex], &deviceFeatures);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(devices[deviceIndex], surface, &formatCount, NULL);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(devices[deviceIndex], surface, &modeCount, NULL);
+
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, NULL);
 		VkExtensionProperties *extensionProperties = malloc(extensionCount * sizeof(VkExtensionProperties));
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, extensionProperties);
 		for (uint32_t extensionIndex = 0; extensionIndex < extensionCount; extensionIndex++)
-		{
-			if (!strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
-			{
-				swapchainSupport = 1;
+			if (swapchainSupport = !strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
 				break;
-			}
-		}
 		free(extensionProperties);
 
-		SwapchainDetails temporaryDetails = {0};
-		if(swapchainSupport && deviceFeatures.geometryShader
-		  && deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-			temporaryDetails = generateSwapchainDetails(devices[deviceIndex]);
-
-		if(temporaryDetails.formatCount && temporaryDetails.modeCount)
+		if (formatCount && modeCount && swapchainSupport && deviceFeatures.geometryShader)
 		{
-			swapchainDetails = temporaryDetails;
-			physicalDevice = devices[deviceIndex];
-			printf("Picked Physical Device: %s\n", deviceProperties.deviceName);
-			break;
-		}
+			int32_t deviceScore = extensionCount + (formatCount + modeCount) * 16;
+			if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+				deviceScore *= 2;
 
-		else
-		{
-			free(temporaryDetails.surfaceFormats);
-			free(temporaryDetails.presentModes);
+			if (deviceScore >= maxScore)
+			{
+				maxScore = deviceScore;
+				bestIndex = deviceIndex;
+				strncpy(deviceName, deviceProperties.deviceName, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+			}
 		}
 	}
 
+	if (maxScore != -1)
+	{
+		physicalDevice = devices[bestIndex];
+		swapchainDetails = generateSwapchainDetails(physicalDevice);
+		printf("Picked Physical Device: %s\n", deviceName);
+	}
+
+	free(deviceName);
 	free(devices);
 }
 
@@ -308,14 +317,117 @@ void createLogicalDevice()
 	deviceInfo.pQueueCreateInfos = queueList;
 	
 	if (vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device) == VK_SUCCESS)
-		printf("Created Logical Device: Queue Count %d\n", deviceInfo.queueCreateInfoCount);
+		printf("Created Logical Device: Queue Count = %d\n", deviceInfo.queueCreateInfoCount);
 	vkGetDeviceQueue(device, graphicsIndex, 0, &graphicsQueue);
 	if (graphicsIndex != -1 && graphicsQueue != VK_NULL_HANDLE)
-		printf("Acquired Graphics Queue Handle: Index %d\n", graphicsIndex);
+		printf("Acquired Graphics Queue Handle: Index = %d\n", graphicsIndex);
 	vkGetDeviceQueue(device, presentIndex, 0, &presentQueue);
 	if (presentIndex != -1 && presentQueue != VK_NULL_HANDLE)
-		printf("Acquired Presentation Queue Handle: Index %d\n", presentIndex);
+		printf("Acquired Presentation Queue Handle: Index = %d\n", presentIndex);
 	free(queueList);
+}
+
+VkSurfaceFormatKHR chooseSurfaceFormat(VkSurfaceFormatKHR* surfaceFormats, uint32_t formatCount)
+{
+	int bgr = 0, srgb = 0;
+	for (uint32_t formatIndex = 0; formatIndex < formatCount; formatIndex++)
+	{
+		if (surfaceFormats[formatIndex].format == VK_FORMAT_UNDEFINED ||
+		  surfaceFormats[formatIndex].format == VK_FORMAT_B8G8R8A8_UNORM)
+			bgr = 1;
+		if (surfaceFormats[formatIndex].format == VK_FORMAT_UNDEFINED ||
+		  surfaceFormats[formatIndex].format == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			srgb = 1;
+	}
+
+	VkSurfaceFormatKHR temporaryFormat = { 0 };
+	temporaryFormat.format = bgr ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormats[0].format;
+	temporaryFormat.colorSpace = srgb ? VK_COLOR_SPACE_SRGB_NONLINEAR_KHR : surfaceFormats[0].colorSpace;
+	return temporaryFormat;
+}
+
+VkPresentModeKHR choosePresentationMode(VkPresentModeKHR* presentModes, uint32_t modeCount)
+{
+	int mailbox = 0, relaxed = 0;
+	for (uint32_t modeIndex = 0; modeIndex < modeCount; modeIndex++)
+	{
+		if (presentModes[modeIndex] == VK_PRESENT_MODE_MAILBOX_KHR)
+			mailbox = 1;
+		else if (presentModes[modeIndex] == VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+			relaxed = 1;
+	}
+
+	if (mailbox)
+		return VK_PRESENT_MODE_MAILBOX_KHR;
+	else if (relaxed)
+		return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+	else
+		return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+void createSwapchain()
+{
+	VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(swapchainDetails.surfaceFormats, swapchainDetails.formatCount);
+	VkPresentModeKHR presentMode = choosePresentationMode(swapchainDetails.presentModes, swapchainDetails.modeCount);
+	swapchainImageCount = swapchainDetails.capabilities.minImageCount +
+		(swapchainDetails.capabilities.minImageCount < swapchainDetails.capabilities.maxImageCount);
+	swapchainFormat = surfaceFormat.format;
+	swapchainExtent = swapchainDetails.capabilities.currentExtent;
+	
+	VkSwapchainCreateInfoKHR swapchainInfo = {0};
+	swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapchainInfo.surface = surface;
+	swapchainInfo.oldSwapchain = VK_NULL_HANDLE;
+	swapchainInfo.minImageCount = swapchainImageCount;
+	swapchainInfo.imageFormat = swapchainFormat;
+	swapchainInfo.imageColorSpace = surfaceFormat.colorSpace;
+	swapchainInfo.presentMode = presentMode;
+	swapchainInfo.clipped = VK_TRUE;
+	swapchainInfo.imageExtent = swapchainExtent;
+	swapchainInfo.imageArrayLayers = 1;
+	swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	swapchainInfo.preTransform = swapchainDetails.capabilities.currentTransform;
+	swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	if (graphicsIndex != presentIndex)
+	{
+		uint32_t queueIndices[] = { graphicsIndex, presentIndex };
+		swapchainInfo.queueFamilyIndexCount = 2;
+		swapchainInfo.pQueueFamilyIndices = queueIndices;
+		swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+	}
+
+	if (vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS)
+		printf("Created Swapchain: %s\n", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "FIFO");
+	vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, NULL);
+	swapchainImages = malloc(swapchainImageCount * sizeof(VkImage));
+	vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, swapchainImages);
+	if (swapchainImageCount && swapchainImages)
+		printf("Acquired Swapchain Images: Count = %d\n", swapchainImageCount);
+}
+
+void createImageViews()
+{
+	swapchainViews = malloc(swapchainImageCount * sizeof(VkImageView));
+	for (uint32_t viewIndex = 0; viewIndex < swapchainImageCount; viewIndex++)
+	{
+		VkImageViewCreateInfo viewInfo = {0};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = swapchainImages[viewIndex];
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = swapchainFormat;
+		viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		if (vkCreateImageView(device, &viewInfo, NULL, &swapchainViews[viewIndex]) == VK_SUCCESS)
+			printf("Acquired Image View: Number = %d\n", viewIndex);
+	}
 }
 
 void setup()
@@ -328,6 +440,8 @@ void setup()
 	createSurface();
 	pickPhysicalDevice();
 	createLogicalDevice();
+	createSwapchain();
+	createImageViews();
 }
 
 #ifdef _WIN32
@@ -338,16 +452,26 @@ void setup()
 			PostQuitMessage(0);
 			return 0;
 		}
+		else if (message == WM_SIZING)
+		{
+			RECT rect;
+			GetClientRect(hWnd, &rect);
+			width = rect.right;
+			height = rect.bottom;
+			free(swapchainDetails.surfaceFormats);
+			free(swapchainDetails.presentModes);
+			swapchainDetails = generateSwapchainDetails(physicalDevice);
+		}
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 #endif
 
 void draw()
 {
-	#ifdef _WIN32
-		MSG msg;
-		while (1)
-		{
+	while (1)
+	{
+		#ifdef _WIN32
+			MSG msg;
 			if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 			{
 				TranslateMessage(&msg);
@@ -355,34 +479,33 @@ void draw()
 				if (msg.message == WM_QUIT)
 					break;
 			}
-		}
-	#elif __linux__
-		while(1)
-		{
+		#elif __linux__
 			event = xcb_poll_for_event(xconn);
-			if(event)
+			if (event)
 			{
-				if((event->response_type & ~0x80) == XCB_RESIZE_REQUEST)
+				if ((event->response_type & ~0x80) == XCB_RESIZE_REQUEST)
 				{
 					width = ((xcb_resize_request_event_t*)event)->width;
 					height = ((xcb_resize_request_event_t*)event)->height;
 					free(swapchainDetails.surfaceFormats);
 					free(swapchainDetails.presentModes);
-					swapchainDetails = generateSwapchainDetails;
+					swapchainDetails = generateSwapchainDetails(physicalDevice);
 					continue;
 				}
-				else if((event->response_type & ~0x80) == XCB_CLIENT_MESSAGE &&
-				  ((xcb_client_message_event_t*)event)->data.data32[0] == atom)
+				else if ((event->response_type & ~0x80) == XCB_CLIENT_MESSAGE &&
+					((xcb_client_message_event_t*)event)->data.data32[0] == atom)
 					break;
 				free(event);
 			}
-		}
-		free(event);
-	#endif
+		#endif
+	}
 }
 
 void clean()
 {
+	for (uint32_t viewIndex = 0; viewIndex < swapchainImageCount; viewIndex++)
+		vkDestroyImageView(device, swapchainViews[viewIndex], NULL);
+	vkDestroySwapchainKHR(device, swapchain, NULL);
 	vkDestroyDevice(device, NULL);
 	vkDestroySurfaceKHR(instance, surface, NULL);
 	#ifdef __linux__
