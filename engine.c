@@ -19,7 +19,7 @@ struct swapchainDetails {
 	VkPresentModeKHR* presentModes;
 } typedef SwapchainDetails;
 
-uint16_t width, height;
+uint32_t width, height;
 VkInstance instance;
 VkSurfaceKHR surface;
 VkPhysicalDevice physicalDevice;
@@ -489,7 +489,7 @@ VkShaderModule initializeShaderModule(const char* shaderName, const char* filePa
 {
 	FILE *file = fopen(filePath, "rb");
 	fseek(file, 0, SEEK_END);
-	int64_t size = ftell(file);
+	size_t size = ftell(file);
 	size += size % 4 ? 4 - size % 4 : 0;
 	rewind(file);
 	
@@ -504,7 +504,7 @@ VkShaderModule initializeShaderModule(const char* shaderName, const char* filePa
 	
 	VkShaderModule shaderModule;
 	if(vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule) == VK_SUCCESS)
-		printf("Created %s Shader Module: %ld bytes\n", shaderName, size);
+		printf("Created %s Shader Module: %zd bytes\n", shaderName, size);
 	free(shaderData);
 	return shaderModule;
 }
@@ -751,9 +751,12 @@ void setup()
 		{
 			RECT rect;
 			GetClientRect(hWnd, &rect);
-			width = rect.right;
-			height = rect.bottom;
-			recreateSwapchain();
+			if(width > 0 && height > 0 && (rect.right != width || rect.bottom != height))
+			{
+				width = rect.right;
+				height = rect.bottom;
+				recreateSwapchain();
+			}
 		}
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
