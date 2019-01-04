@@ -620,9 +620,7 @@ void createGraphicsPipeline()
 	
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {0};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-		VK_COLOR_COMPONENT_G_BIT |
-		VK_COLOR_COMPONENT_B_BIT |
-		VK_COLOR_COMPONENT_A_BIT;
+	  VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	colorBlendAttachment.blendEnable = VK_TRUE;
 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -732,7 +730,7 @@ void createVertexBuffer()
 	void* data;
 	vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
 	vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-		memcpy(data, vertices, bufferInfo.size);
+	memcpy(data, vertices, bufferInfo.size);
 	vkUnmapMemory(device, vertexBufferMemory);
 	printf("Copied Vertex Buffer Into Memory: Size = %d\n", bufferInfo.size);
 }
@@ -985,8 +983,8 @@ void clean()
 		vkDestroySemaphore(device, imageAvailable[syncIndex], NULL);
 	}
 	vkDestroyCommandPool(device, commandPool, NULL);
-    vkFreeMemory(device, vertexBufferMemory, NULL);
-    vkDestroyBuffer(device, vertexBuffer, NULL);
+	vkFreeMemory(device, vertexBufferMemory, NULL);
+	vkDestroyBuffer(device, vertexBuffer, NULL);
 	for(uint32_t framebufferIndex = 0; framebufferIndex < framebufferSize; framebufferIndex++)
 		vkDestroyFramebuffer(device, swapchainFramebuffers[framebufferIndex], NULL);
 	vkDestroyPipeline(device, graphicsPipeline, NULL);
