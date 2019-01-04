@@ -900,7 +900,7 @@ void draw()
 					}
 				}
 				else if((event->response_type & ~0x80) == XCB_CLIENT_MESSAGE &&
-					((xcb_client_message_event_t*)event)->data.data32[0] == atom)
+				  ((xcb_client_message_event_t*)event)->data.data32[0] == atom)
 					break;
 				free(event);
 			}
