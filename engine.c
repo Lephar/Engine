@@ -689,9 +689,9 @@ uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 
 	for(uint32_t index = 0; index < memoryProperties.memoryTypeCount; index++)
-    	if((filter & (1 << index)) &&
+		if((filter & (1 << index)) &&
 		  (memoryProperties.memoryTypes[index].propertyFlags & flags) == flags)
-    		return index;
+			return index;
 }
 
 void createVertexBuffer()
