@@ -149,7 +149,7 @@ void createInstance()
 
 void createWindow()
 {
-	width = 320;
+	width = 240;
 	height = 240;
 	#ifdef _WIN32
 		height += 40;
@@ -182,10 +182,11 @@ void createWindow()
 		xcb_intern_atom_cookie_t cookie = xcb_intern_atom(xconn, 0, strlen(message), message);
 		xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(xconn, cookie, 0);
 		atom = reply->atom;
+		message = "Vulkan";
 		xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, protReply->atom, XCB_ATOM_ATOM,
 		  32, 1, &reply->atom);
 		xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING,
-		  8, 7, "Vulkan");
+		  8, strlen(message), message);
 		xcb_map_window(xconn, window);
 		xcb_flush(xconn);
 		printf("Created Window: Xorg XCB\n");
@@ -609,7 +610,8 @@ void createGraphicsPipeline()
 	rasterizerInfo.depthClampEnable = VK_FALSE;
 	rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
 	rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
+	//rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
+	rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizerInfo.depthBiasEnable = VK_FALSE;
 	
@@ -683,6 +685,15 @@ void createFramebuffers()
 	}
 }
 
+void createCommandPool()
+{
+	VkCommandPoolCreateInfo poolInfo = {0};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.queueFamilyIndex = graphicsIndex;
+	if(vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) == VK_SUCCESS)
+		printf("Created Command Pool: Queue Index = %u\n", graphicsIndex);
+}
+
 uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
 {
 	VkPhysicalDeviceMemoryProperties memoryProperties;
@@ -694,54 +705,107 @@ uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
 			return index;
 }
 
-void createVertexBuffer()
+void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+  VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory)
 {
-	Vertex buffer[] = {
-		{{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
-	};
-
-	vertices = buffer;
-	vertexSize = sizeof(Vertex);
-	vertexCount = sizeof(buffer) / sizeof(buffer[0]);
-
 	VkBufferCreateInfo bufferInfo = {0};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	bufferInfo.size = vertexCount * vertexSize;
+	bufferInfo.usage = usage;
+	bufferInfo.size = size;
 
-	if(vkCreateBuffer(device, &bufferInfo, NULL, &vertexBuffer) == VK_SUCCESS)
+	if(vkCreateBuffer(device, &bufferInfo, NULL, buffer) == VK_SUCCESS)
         printf("Created Vertex Buffer: Vertex Count = %d\n", vertexCount);
 
 	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(device, vertexBuffer, &memoryRequirements);
+	vkGetBufferMemoryRequirements(device, *buffer, &memoryRequirements);
 
 	VkMemoryAllocateInfo allocateInfo = {0};
 	allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocateInfo.allocationSize = memoryRequirements.size;
-	allocateInfo.memoryTypeIndex = chooseMemoryType(memoryRequirements.memoryTypeBits,
-	  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	
-	if(vkAllocateMemory(device, &allocateInfo, NULL, &vertexBufferMemory) == VK_SUCCESS)
+	allocateInfo.memoryTypeIndex = chooseMemoryType(memoryRequirements.memoryTypeBits, properties);
+
+	if(vkAllocateMemory(device, &allocateInfo, NULL, bufferMemory) == VK_SUCCESS)
 		printf("Allocated Vertex Buffer Memory: Size = %d\n", allocateInfo.allocationSize);
-	
-	void* data;
-	vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
-	vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-	memcpy(data, vertices, bufferInfo.size);
-	vkUnmapMemory(device, vertexBufferMemory);
-	printf("Copied Vertex Buffer Into Memory: Size = %d\n", bufferInfo.size);
+	vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
 
-void createCommandPool()
+void copyBuffer(VkBuffer* srcBuffer, VkBuffer* dstBuffer, VkDeviceSize size)
 {
-	VkCommandPoolCreateInfo poolInfo = {0};
-	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	poolInfo.queueFamilyIndex = graphicsIndex;
-	if(vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) == VK_SUCCESS)
-		printf("Created Command Pool: Queue Index = %u\n", graphicsIndex);
+	VkCommandBufferAllocateInfo allocateInfo = {0};
+	allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocateInfo.commandPool = commandPool;
+	allocateInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo = {0};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	
+	VkBufferCopy copyRegion = {0};
+	copyRegion.srcOffset = 0;
+	copyRegion.dstOffset = 0;
+	copyRegion.size = size;
+	
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	vkCmdCopyBuffer(commandBuffer, *srcBuffer, *dstBuffer, 1, &copyRegion);
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo = {0};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(graphicsQueue);
+	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+void createVertexBuffer()
+{
+	/*Vertex buffer[] = {
+		{{0.0f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
+	};*/
+
+	Vertex buffer[] = {
+		{{-0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
+		{{0.0f, 0.8f}, {0.8f, 0.4f, 0.0f}},
+		{{-0.9f, 0.0f}, {0.8f, 0.4f, 0.0f}},
+		{{0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
+		{{0.9f, 0.0f}, {0.8f, 0.4f, 0.0f}},
+		{{0.0f, 0.8f}, {0.8f, 0.4f, 0.0f}},
+		{{-0.7f, -0.2f}, {0.8f, 0.4f, 0.0f}},
+		{{0.7f, -0.2f}, {0.8f, 0.4f, 0.0f}},
+		{{0.0f, 0.8f}, {0.8f, 0.4f, 0.0f}}
+	};
+
+	vertices = buffer;
+	vertexSize = sizeof(Vertex);
+	vertexCount = sizeof(buffer) / vertexSize;
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+	  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+	  &stagingBuffer, &stagingBufferMemory);
+
+	void* data;
+	vkMapMemory(device, stagingBufferMemory, 0, vertexCount * vertexSize, 0, &data);
+	memcpy(data, vertices, vertexCount * vertexSize);
+	vkUnmapMemory(device, stagingBufferMemory);
+
+	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+	  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
+	copyBuffer(&stagingBuffer, &vertexBuffer, vertexCount * vertexSize);
+	printf("Copied Vertex Buffer Into Memory: Size = %d\n", vertexCount * vertexSize);
+
+	vkDestroyBuffer(device, stagingBuffer, NULL);
+    vkFreeMemory(device, stagingBufferMemory, NULL);
 }
 
 void createCommandBuffers()
@@ -839,8 +903,8 @@ void setup()
 	createRenderPass();
 	createGraphicsPipeline();
 	createFramebuffers();
-	createVertexBuffer();
 	createCommandPool();
+	createVertexBuffer();
 	createCommandBuffers();
 	createSyncObjects();
 }
@@ -857,7 +921,7 @@ void setup()
 		{
 			RECT rect;
 			GetClientRect(hWnd, &rect);
-			if(width > 0 && height > 0 && (rect.right != width || rect.bottom != height))
+			if(rect.right > 0 && rect.bottom > 0 && (rect.right != width || rect.bottom != height))
 			{
 				width = rect.right;
 				height = rect.bottom;
@@ -871,7 +935,7 @@ void setup()
 void draw()
 {
 	uint32_t startFrame = 0, currentFrame = 0, frameCount = 0;
-	//time_t startTime = time(NULL), currentTime;
+	time_t startTime = time(NULL), currentTime;
 
 	while(1)
 	{
@@ -946,14 +1010,14 @@ void draw()
 		
 		frameCount++;
 		currentFrame = frameCount % framebufferLimit;
-		
-		/*currentTime = time(NULL);
+
+		currentTime = time(NULL);
 		if(startTime < currentTime)
 		{
 			printf("FPS = %d\n", frameCount - startFrame);
 			startFrame = frameCount;
 			startTime = currentTime;
-		}*/
+		}
 	}
 	
 	vkDeviceWaitIdle(device);
