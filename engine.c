@@ -704,6 +704,8 @@ uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
 		if((filter & (1 << index)) &&
 		  (memoryProperties.memoryTypes[index].propertyFlags & flags) == flags)
 			return index;
+	
+	return 0;
 }
 
 void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
@@ -716,7 +718,7 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	bufferInfo.size = size;
 
 	if(vkCreateBuffer(device, &bufferInfo, NULL, buffer) == VK_SUCCESS)
-		printf("Created Buffer: Size = %d\n", bufferInfo.size);
+		printf("Created Buffer: Size = %lu\n", bufferInfo.size);
 
 	VkMemoryRequirements memoryRequirements;
 	vkGetBufferMemoryRequirements(device, *buffer, &memoryRequirements);
@@ -727,7 +729,7 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	allocateInfo.memoryTypeIndex = chooseMemoryType(memoryRequirements.memoryTypeBits, properties);
 
 	if(vkAllocateMemory(device, &allocateInfo, NULL, bufferMemory) == VK_SUCCESS)
-		printf("Allocated Buffer Memory: Size = %d\n", memoryRequirements.size);
+		printf("Allocated Buffer Memory: Size = %lu\n", memoryRequirements.size);
 	vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
 
@@ -763,7 +765,7 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 
 	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
 	vkQueueWaitIdle(graphicsQueue);
-	printf("Successfuly Copied Buffer: Size = %d\n", size);
+	printf("Successfuly Copied Buffer: Size = %lu\n", size);
 
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
@@ -804,7 +806,7 @@ void createVertexBuffer()
 	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 	  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
 	copyBuffer(stagingBuffer, vertexBuffer, vertexCount * vertexSize);
-	printf("Copied Vertex Buffer Into Memory: Size = %d\n", vertexCount * vertexSize);
+	printf("Copied Vertex Buffer Into Memory: Size = %lu\n", vertexCount * vertexSize);
 
 	vkFreeMemory(device, stagingBufferMemory, NULL);
 	vkDestroyBuffer(device, stagingBuffer, NULL);
@@ -832,7 +834,7 @@ void createIndexBuffer()
 	createBuffer(indexCount * indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 	  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
 	copyBuffer(stagingBuffer, indexBuffer, indexCount * indexSize);
-	printf("Copied Index Buffer Into Memory: Size = %d\n", indexCount * indexSize);
+	printf("Copied Index Buffer Into Memory: Size = %lu\n", indexCount * indexSize);
 
 	vkFreeMemory(device, stagingBufferMemory, NULL);
 	vkDestroyBuffer(device, stagingBuffer, NULL);
