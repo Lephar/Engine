@@ -45,8 +45,8 @@ void printPhysicalDeviceLimits(VkPhysicalDeviceLimits limits)
     printf("maxPushConstantsSize: %u\n", limits.maxPushConstantsSize);
     printf("maxMemoryAllocationCount: %u\n", limits.maxMemoryAllocationCount);
     printf("maxSamplerAllocationCount: %u\n", limits.maxSamplerAllocationCount);
-    printf("bufferImageGranularity: %llu\n", limits.bufferImageGranularity);
-    printf("sparseAddressSpaceSize: %llu\n", limits.sparseAddressSpaceSize);
+    printf("bufferImageGranularity: %lu\n", limits.bufferImageGranularity);
+    printf("sparseAddressSpaceSize: %lu\n", limits.sparseAddressSpaceSize);
     printf("maxBoundDescriptorSets: %u\n", limits.maxBoundDescriptorSets);
     printf("maxPerStageDescriptorSamplers: %u\n", limits.maxPerStageDescriptorSamplers);
     printf("maxPerStageDescriptorUniformBuffers: %u\n", limits.maxPerStageDescriptorUniformBuffers);
@@ -106,10 +106,10 @@ void printPhysicalDeviceLimits(VkPhysicalDeviceLimits limits)
 	printf("viewportBoundsRange0: %g\n", limits.viewportBoundsRange[0]);
 	printf("viewportBoundsRange1: %g\n", limits.viewportBoundsRange[1]);
     printf("viewportSubPixelBits: %u\n", limits.viewportSubPixelBits);
-    printf("minMemoryMapAlignment: %llu\n", limits.minMemoryMapAlignment);
-    printf("minTexelBufferOffsetAlignment: %llu\n", limits.minTexelBufferOffsetAlignment);
-    printf("minUniformBufferOffsetAlignment: %llu\n", limits.minUniformBufferOffsetAlignment);
-    printf("minStorageBufferOffsetAlignment: %llu\n", limits.minStorageBufferOffsetAlignment);
+    printf("minMemoryMapAlignment: %lu\n", limits.minMemoryMapAlignment);
+    printf("minTexelBufferOffsetAlignment: %lu\n", limits.minTexelBufferOffsetAlignment);
+    printf("minUniformBufferOffsetAlignment: %lu\n", limits.minUniformBufferOffsetAlignment);
+    printf("minStorageBufferOffsetAlignment: %lu\n", limits.minStorageBufferOffsetAlignment);
     printf("minTexelOffset: %d\n", limits.minTexelOffset);
     printf("maxTexelOffset: %u\n", limits.maxTexelOffset);
     printf("minTexelGatherOffset: %d\n", limits.minTexelGatherOffset);
@@ -145,9 +145,9 @@ void printPhysicalDeviceLimits(VkPhysicalDeviceLimits limits)
     printf("lineWidthGranularity: %g\n", limits.lineWidthGranularity);
     printf("strictLines: %d\n", limits.strictLines);
     printf("standardSampleLocations: %d\n", limits.standardSampleLocations);
-    printf("optimalBufferCopyOffsetAlignment: %llu\n", limits.optimalBufferCopyOffsetAlignment);
-    printf("optimalBufferCopyRowPitchAlignment: %llu\n", limits.optimalBufferCopyRowPitchAlignment);
-    printf("nonCoherentAtomSize: %llu\n", limits.nonCoherentAtomSize);
+    printf("optimalBufferCopyOffsetAlignment: %lu\n", limits.optimalBufferCopyOffsetAlignment);
+    printf("optimalBufferCopyRowPitchAlignment: %lu\n", limits.optimalBufferCopyRowPitchAlignment);
+    printf("nonCoherentAtomSize: %lu\n", limits.nonCoherentAtomSize);
 }
 
 void printPhysicalDeviceSparseProperties(VkPhysicalDeviceSparseProperties properties)
