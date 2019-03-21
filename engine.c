@@ -506,11 +506,12 @@ VkShaderModule initializeShaderModule(const char* shaderName, const char* filePa
 	FILE *file = fopen(filePath, "rb");
 	fseek(file, 0, SEEK_END);
 	size_t size = ftell(file);
-	size += size % 4 ? 4 - size % 4 : 0;
+	//size += size % 4 ? 4 - size % 4 : 0;
 	rewind(file);
 	
 	uint32_t *shaderData = calloc(size, 1);
-	fread(shaderData, size, 1, file);
+	if(fread(shaderData, size, 1, file) != size)
+		return NULL; //TODO: implement error handling
 	fclose(file);
 	
 	VkShaderModuleCreateInfo shaderInfo = {0};
