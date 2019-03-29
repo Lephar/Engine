@@ -14,7 +14,7 @@
 #endif
 
 struct vertex {
-    float pos[2];
+	float pos[2];
 	float col[3];
 } typedef Vertex;
 
