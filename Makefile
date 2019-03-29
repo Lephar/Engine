@@ -1,6 +1,6 @@
 CC = gcc
 GLSLC = glslangValidator
-CFLAGS = -Ofast -Wall
+CFLAGS = -std=gnu17 -march=native -Ofast -Wall
 LDLIBS = -lxcb -lvulkan
 SOURCES = engine.c
 VSHADES = shaders/shader.vert
