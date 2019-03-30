@@ -4,18 +4,10 @@
 #include <string.h>
 #include <limits.h>
 
+#include <xcb/xcb.h>
 #include <vulkan/vulkan.h>
-
-#ifdef _WIN32
-	#include <windows.h>
-	#include <vulkan/vulkan_win32.h>
-#elif __linux__
-	#include <xcb/xcb.h>
-	#include <vulkan/vulkan_xcb.h>
-#endif
-
+#include <vulkan/vulkan_xcb.h>
 #include <blis/blis.h>
-
 #include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
 //#include "libraries/device_support.h"
@@ -33,6 +25,11 @@ struct swapchainDetails {
 } typedef SwapchainDetails;
 
 uint32_t width, height;
+xcb_connection_t *xconn;
+xcb_window_t window;
+xcb_generic_event_t *event;
+xcb_atom_t atom;
+
 VkInstance instance;
 VkSurfaceKHR surface;
 VkPhysicalDevice physicalDevice;
@@ -65,24 +62,10 @@ void clean();
 void recreateSwapchain();
 void cleanupSwapchain();
 
-#ifdef _WIN32
-	HINSTANCE instanceHandle;
-	WNDCLASS windowClass;
-	HWND windowHandle;
-	LRESULT CALLBACK WindowProc(HWND, UINT, WPARAM, LPARAM);
-#elif __linux__
-	xcb_connection_t *xconn;
-	xcb_window_t window;
-	xcb_generic_event_t *event;
-	xcb_atom_t atom;
-#endif
-
-#ifndef NDEBUG
-	VkDebugUtilsMessengerEXT messenger;
-	static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
-	  VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
-	  const VkDebugUtilsMessengerCallbackDataEXT*, void*);
-#endif
+VkDebugUtilsMessengerEXT messenger;
+static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
+  const VkDebugUtilsMessengerCallbackDataEXT*, void*);
 
 void createInstance()
 {
@@ -94,19 +77,10 @@ void createInstance()
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_1;
 	
-	#ifdef _WIN32
-		const char *PLATFORM_SURFACE_NAME = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
-	#elif __linux__
-		const char *PLATFORM_SURFACE_NAME = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
-	#endif
+	const char *PLATFORM_SURFACE_NAME = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
 	
-	#ifndef NDEBUG
-		const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
-		uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
-	#else
-		const char **layerNames = NULL;
-		uint32_t layerCount = 0;
-	#endif
+	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
+	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
 	
 	const char *extensionNames[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 	  VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURFACE_NAME};
@@ -124,36 +98,34 @@ void createInstance()
 		printf("Created Instance: LunarG\n");
 }
 
-#ifndef NDEBUG
-	static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
-	  VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
-	  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
-	{
-		if(severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
-			printf("%s\n", pCallbackData->pMessage);
-		return VK_FALSE;
-	}
+static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+{
+	if(severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+		printf("%s\n", pCallbackData->pMessage);
+	return VK_FALSE;
+}
+
+void registerMessenger()
+{
+	VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {0};
+	messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	messengerInfo.messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+	  //VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+	  VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+	  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	messengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+	  VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+	  VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+	messengerInfo.pfnUserCallback = messageCallback;
+	messengerInfo.pUserData = NULL;
 	
-	void registerMessenger()
-	{
-		VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {0};
-		messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		messengerInfo.messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-		  //VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-		  VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-		  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		messengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-		  VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-		  VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		messengerInfo.pfnUserCallback = messageCallback;
-		messengerInfo.pUserData = NULL;
-		
-		PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
-		  (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-		if(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS)
-			printf("Registered Messenger: Validation Layers\n");
-	}
-#endif
+	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
+	  (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+	if(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS)
+		printf("Registered Messenger: Validation Layers\n");
+}
 
 void createWindow()
 {
