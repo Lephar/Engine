@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-
 #include <xcb/xcb.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xcb.h>
@@ -12,23 +11,28 @@
 #include "libraries/tinyobj_loader_c.h"
 //#include "libraries/device_support.h"
 
-struct vertex {
+struct vertex
+{
 	float pos[2];
 	float col[3];
-} typedef Vertex;
+};
 
-struct swapchainDetails {
+struct swapchainDetails
+{
 	VkSurfaceCapabilitiesKHR capabilities;
 	uint32_t formatCount, modeCount;
-	VkSurfaceFormatKHR* surfaceFormats;
-	VkPresentModeKHR* presentModes;
-} typedef SwapchainDetails;
+	VkSurfaceFormatKHR *surfaceFormats;
+	VkPresentModeKHR *presentModes;
+};
+
+typedef struct vertex Vertex;
+typedef struct swapchainDetails SwapchainDetails;
 
 uint32_t width, height;
 xcb_connection_t *xconn;
 xcb_window_t window;
 xcb_generic_event_t *event;
-xcb_atom_t atom;
+xcb_atom_t destroyEvent;
 
 VkInstance instance;
 VkDebugUtilsMessengerEXT messenger;
@@ -73,13 +77,10 @@ void createInstance()
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_1;
 	
-	const char *PLATFORM_SURFACE_NAME = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
-	
 	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
-	
 	const char *extensionNames[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-	  VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURFACE_NAME};
+	 VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_EXTENSION_NAME};
 	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
 	
 	VkInstanceCreateInfo instanceInfo = {0};
@@ -95,9 +96,12 @@ void createInstance()
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
-  VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
-  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+ VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+ const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
 {
+	(void)type;
+	(void)pUserData;
+		
 	if(severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
 		printf("%s\n", pCallbackData->pMessage);
 	return VK_FALSE;
@@ -108,17 +112,17 @@ void registerMessenger()
 	VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {0};
 	messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	messengerInfo.messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-	  //VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-	  VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-	  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	 //VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+	 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+	 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	messengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-	  VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-	  VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+	 VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+	 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	messengerInfo.pfnUserCallback = messageCallback;
 	messengerInfo.pUserData = NULL;
 	
 	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
-	  (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+	 (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 	if(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS)
 		printf("Registered Messenger: Validation Layers\n");
 }
@@ -130,22 +134,24 @@ void createWindow()
 	xconn = xcb_connect(NULL, NULL);
 	xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(xconn)).data;
 	window = xcb_generate_id(xconn);
+	
 	uint32_t valueList[] = {screen->black_pixel,
-	  XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_STRUCTURE_NOTIFY};
+	 XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_STRUCTURE_NOTIFY};
 	xcb_create_window(xconn, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, width, height, 0,
-	  XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK, valueList);
-	const char *message = "WM_PROTOCOLS";
-	xcb_intern_atom_cookie_t protCookie = xcb_intern_atom(xconn, 0, strlen(message), message);
+	 XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK, valueList);
+	
+	xcb_intern_atom_cookie_t protCookie = xcb_intern_atom(xconn, 0, 12, "WM_PROTOCOLS");
 	xcb_intern_atom_reply_t* protReply = xcb_intern_atom_reply(xconn, protCookie, 0);
-	message = "WM_DELETE_WINDOW";
-	xcb_intern_atom_cookie_t cookie = xcb_intern_atom(xconn, 0, strlen(message), message);
+	xcb_intern_atom_cookie_t cookie = xcb_intern_atom(xconn, 0, 16, "WM_DELETE_WINDOW");
 	xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(xconn, cookie, 0);
-	atom = reply->atom;
-	message = "Vulkan";
 	xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, protReply->atom, XCB_ATOM_ATOM,
-	  32, 1, &reply->atom);
+	 32, 1, &reply->atom);
+	destroyEvent = reply->atom;
+	
+	const char *title = "Vulkan";
 	xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING,
-	  8, strlen(message), message);
+	 8, strlen(title), title);
+	
 	xcb_map_window(xconn, window);
 	xcb_flush(xconn);
 	printf("Created Window: Xorg XCB\n");
@@ -170,9 +176,9 @@ SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
 	temporaryDetails.surfaceFormats = malloc(temporaryDetails.formatCount * sizeof(VkSurfaceFormatKHR));
 	temporaryDetails.presentModes = malloc(temporaryDetails.modeCount * sizeof(VkPresentModeKHR));
 	vkGetPhysicalDeviceSurfaceFormatsKHR(temporaryDevice, surface,
-	  &temporaryDetails.formatCount, temporaryDetails.surfaceFormats);
+	 &temporaryDetails.formatCount, temporaryDetails.surfaceFormats);
 	vkGetPhysicalDeviceSurfacePresentModesKHR(temporaryDevice, surface,
-	  &temporaryDetails.modeCount, temporaryDetails.presentModes);
+	 &temporaryDetails.modeCount, temporaryDetails.presentModes);
 	return temporaryDetails;
 }
 
@@ -201,7 +207,7 @@ void pickPhysicalDevice()
 		vkEnumerateDeviceExtensionProperties(devices[deviceIndex], NULL, &extensionCount, extensionProperties);
 		for(uint32_t extensionIndex = 0; extensionIndex < extensionCount; extensionIndex++)
 			if((swapchainSupport =
-			  !strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME)))
+			 !strcmp(extensionProperties[extensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME)))
 				break;
 		free(extensionProperties);
 		
@@ -245,7 +251,7 @@ void createLogicalDevice()
 		if(queueProperties[queueIndex].queueCount > 0 && presentSupport)
 			presentIndex = queueIndex;
 		if(queueProperties[queueIndex].queueCount > 0 &&
-		  queueProperties[queueIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+		 queueProperties[queueIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			graphicsIndex = queueIndex;
 	}
 	
@@ -274,7 +280,6 @@ void createLogicalDevice()
 	
 	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
-	
 	const char *extensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
 	
@@ -303,10 +308,10 @@ VkSurfaceFormatKHR chooseSurfaceFormat(VkSurfaceFormatKHR* surfaceFormats, uint3
 	for(uint32_t formatIndex = 0; formatIndex < formatCount; formatIndex++)
 	{
 		if(surfaceFormats[formatIndex].format == VK_FORMAT_UNDEFINED ||
-		  surfaceFormats[formatIndex].format == VK_FORMAT_B8G8R8A8_UNORM)
+		 surfaceFormats[formatIndex].format == VK_FORMAT_B8G8R8A8_UNORM)
 			bgr = 1;
 		if(surfaceFormats[formatIndex].format == VK_FORMAT_UNDEFINED ||
-		  surfaceFormats[formatIndex].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+		 surfaceFormats[formatIndex].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 			srgb = 1;
 	}
 	
@@ -338,11 +343,11 @@ VkPresentModeKHR choosePresentationMode(VkPresentModeKHR* presentModes, uint32_t
 void createSwapchain()
 {
 	VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(
-	  swapchainDetails.surfaceFormats, swapchainDetails.formatCount);
+	 swapchainDetails.surfaceFormats, swapchainDetails.formatCount);
 	VkPresentModeKHR presentMode = choosePresentationMode(
-	  swapchainDetails.presentModes, swapchainDetails.modeCount);
+	 swapchainDetails.presentModes, swapchainDetails.modeCount);
 	framebufferSize = swapchainDetails.capabilities.minImageCount +
-		(swapchainDetails.capabilities.minImageCount < swapchainDetails.capabilities.maxImageCount);
+	 (swapchainDetails.capabilities.minImageCount < swapchainDetails.capabilities.maxImageCount);
 	swapchainFormat = surfaceFormat.format;
 	swapchainExtent = swapchainDetails.capabilities.currentExtent;
 	
@@ -515,7 +520,7 @@ void createGraphicsPipeline()
 	
 	VkVertexInputBindingDescription inputBinding = generateVertexInputBinding();
 	VkVertexInputAttributeDescription inputAttributes[] = 
-	  {generatePositionInputAttributes(), generateColorInputAttributes()};
+	 {generatePositionInputAttributes(), generateColorInputAttributes()};
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {0};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -554,8 +559,8 @@ void createGraphicsPipeline()
 	rasterizerInfo.depthClampEnable = VK_FALSE;
 	rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
 	rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
-	//rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+	//rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
+	rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizerInfo.depthBiasEnable = VK_FALSE;
 	
@@ -566,7 +571,7 @@ void createGraphicsPipeline()
 	
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {0};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-	  VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	 VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	colorBlendAttachment.blendEnable = VK_TRUE;
 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -624,7 +629,7 @@ void createFramebuffers()
 		framebufferInfo.width = swapchainExtent.width;
 		framebufferInfo.height = swapchainExtent.height;
 		if(vkCreateFramebuffer(device, &framebufferInfo, NULL,
-		  &swapchainFramebuffers[framebufferIndex]) == VK_SUCCESS)
+		 &swapchainFramebuffers[framebufferIndex]) == VK_SUCCESS)
 			printf("Created Framebuffer: Number = %u\n", framebufferIndex);
 	}
 }
@@ -645,14 +650,14 @@ uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
 
 	for(uint32_t index = 0; index < memoryProperties.memoryTypeCount; index++)
 		if((filter & (1 << index)) &&
-		  (memoryProperties.memoryTypes[index].propertyFlags & flags) == flags)
+		 (memoryProperties.memoryTypes[index].propertyFlags & flags) == flags)
 			return index;
 	
 	return 0;
 }
 
 void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
-  VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory)
+ VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory)
 {
 	VkBufferCreateInfo bufferInfo = {0};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -726,10 +731,10 @@ void createVertexBuffer()
 		{{0.0f, 0.8f}, {0.8f, 0.4f, 0.0f}},
 		{{-0.7f, -0.2f}, {0.8f, 0.4f, 0.0f}},
 		{{0.7f, -0.2f}, {0.8f, 0.4f, 0.0f}},
-		{{-0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
 		{{-0.9f, 0.0f}, {0.8f, 0.4f, 0.0f}},
-		{{0.9f, 0.0f}, {0.8f, 0.4f, 0.0f}},
-		{{0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}}
+		{{-0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
+		{{0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
+		{{0.9f, 0.0f}, {0.8f, 0.4f, 0.0f}}
 	};
 
 	vertices = buffer;
@@ -739,7 +744,7 @@ void createVertexBuffer()
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-	  | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
+	 | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
 
 	void* data;
 	vkMapMemory(device, stagingBufferMemory, 0, vertexCount * vertexSize, 0, &data);
@@ -747,7 +752,7 @@ void createVertexBuffer()
 	vkUnmapMemory(device, stagingBufferMemory);
 
 	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-	  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
+	 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
 	copyBuffer(stagingBuffer, vertexBuffer, vertexCount * vertexSize);
 	printf("Copied Vertex Buffer Into Memory: Size = %lu\n", vertexCount * vertexSize);
 
@@ -767,7 +772,7 @@ void createIndexBuffer()
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 	createBuffer(indexCount * indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-	  | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
+	 | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
 
 	void* data;
 	vkMapMemory(device, stagingBufferMemory, 0, indexCount * indexSize, 0, &data);
@@ -775,7 +780,7 @@ void createIndexBuffer()
 	vkUnmapMemory(device, stagingBufferMemory);
 
 	createBuffer(indexCount * indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-	  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
+	 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
 	copyBuffer(stagingBuffer, indexBuffer, indexCount * indexSize);
 	printf("Copied Index Buffer Into Memory: Size = %lu\n", indexCount * indexSize);
 
@@ -854,7 +859,8 @@ void recreateSwapchain()
 {
 	vkDeviceWaitIdle(device);
 	cleanupSwapchain();
-	swapchainDetails = generateSwapchainDetails(physicalDevice);
+	swapchainDetails =
+	 generateSwapchainDetails(physicalDevice);
 	
 	createSwapchain();
 	createImageViews();
@@ -884,39 +890,47 @@ void setup()
 	createSyncObjects();
 }
 
-void draw()
+xcb_atom_t windowEvent()
 {
-	uint32_t startFrame = 0, currentFrame = 0, frameCount = 0;
-	time_t startTime = time(NULL), currentTime;
-
-	while(1)
+	event = xcb_poll_for_event(xconn);
+	
+	if(event)
 	{
-		event = xcb_poll_for_event(xconn);
-		if(event)
+		uint8_t response = event->response_type & ~0x80;
+		
+		if(response == XCB_CONFIGURE_NOTIFY)
 		{
-			if((event->response_type & ~0x80) == XCB_CONFIGURE_NOTIFY)
+			xcb_configure_notify_event_t* configNotify = (xcb_configure_notify_event_t*)event;
+			
+			if(configNotify->width > 0 && configNotify->height > 0 &&
+			 (configNotify->width != width || configNotify->height != height))
 			{
-				xcb_configure_notify_event_t* configNotify = (xcb_configure_notify_event_t*)event;
-				if(configNotify->width > 0 && configNotify->height > 0 &&
-				  (configNotify->width != width || configNotify->height != height))
-				{
-					width = configNotify->width;
-					height = configNotify->height;
-					recreateSwapchain();
-				}
+				width = configNotify->width;
+				height = configNotify->height;
 			}
-			else if((event->response_type & ~0x80) == XCB_CLIENT_MESSAGE &&
-			  ((xcb_client_message_event_t*)event)->data.data32[0] == atom)
-				break;
-			free(event);
 		}
 		
+		else if(response == XCB_CLIENT_MESSAGE)
+			return ((xcb_client_message_event_t*)event)->data.data32[0];
+		
+		free(event);
+	}
+	
+	return !destroyEvent;
+}
+
+void draw()
+{
+	uint32_t currentFrame = 0, frameCount = 0;
+	
+	while(windowEvent() != destroyEvent)
+	{	
 		vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, ULONG_MAX);
 		
 		uint32_t imageIndex;
-		VkResult result = vkAcquireNextImageKHR(device, swapchain, ULONG_MAX,
-		  imageAvailable[currentFrame], VK_NULL_HANDLE, &imageIndex);
-		if(result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
+		VkResult acquireResult = vkAcquireNextImageKHR(device, swapchain, ULONG_MAX,
+		 imageAvailable[currentFrame], VK_NULL_HANDLE, &imageIndex);
+		if(acquireResult == VK_SUBOPTIMAL_KHR || acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
 		{
 			recreateSwapchain();
 			continue;
@@ -947,20 +961,15 @@ void draw()
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapchains;
 		presentInfo.pImageIndices = &imageIndex;
-		vkQueuePresentKHR(presentQueue, &presentInfo);
 		
-		frameCount++;
-		currentFrame = frameCount % framebufferLimit;
-
-		currentTime = time(NULL);
-		if(startTime < currentTime)
-		{
-			printf("FPS = %d\n", frameCount - startFrame);
-			startFrame = frameCount;
-			startTime = currentTime;
-		}
+		VkResult presentResult = vkQueuePresentKHR(presentQueue, &presentInfo);
+		if(presentResult == VK_SUBOPTIMAL_KHR || presentResult == VK_ERROR_OUT_OF_DATE_KHR)
+			recreateSwapchain();
+		
+		currentFrame = ++frameCount % framebufferLimit;
 	}
 	
+	free(event);
 	vkDeviceWaitIdle(device);
 }
 
@@ -1005,7 +1014,7 @@ void clean()
 	xcb_destroy_window(xconn, window);
 	xcb_disconnect(xconn);
 	PFN_vkDestroyDebugUtilsMessengerEXT destroyMessenger =
-	  (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+	 (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 	if(destroyMessenger != NULL)
 		destroyMessenger(instance, messenger, NULL);
 	vkDestroyInstance(instance, NULL);
