@@ -1,3 +1,5 @@
+// Ali Emre Gulcu - 2019
+
 #include <stdio.h>
 #include <vulkan/vulkan.h>
 

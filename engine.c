@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+
 #include <vulkan/vulkan.h>
 
 #ifdef _WIN32
@@ -12,6 +13,12 @@
 	#include <xcb/xcb.h>
 	#include <vulkan/vulkan_xcb.h>
 #endif
+
+#include <blis/blis.h>
+
+#include "libraries/stb_image.h"
+#include "libraries/tinyobj_loader_c.h"
+//#include "libraries/device_support.h"
 
 struct vertex {
 	float pos[2];
@@ -83,7 +90,7 @@ void createInstance()
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	appInfo.pApplicationName = "Engine";
 	appInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
-	appInfo.pEngineName = "Mungui Engine";
+	appInfo.pEngineName = "Vulkan Engine";
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_1;
 	
@@ -506,11 +513,10 @@ VkShaderModule initializeShaderModule(const char* shaderName, const char* filePa
 	FILE *file = fopen(filePath, "rb");
 	fseek(file, 0, SEEK_END);
 	size_t size = ftell(file);
-	//size += size % 4 ? 4 - size % 4 : 0;
 	rewind(file);
 	
 	uint32_t *shaderData = calloc(size, 1);
-	if(fread(shaderData, size, 1, file) != size)
+	if(fread(shaderData, 1, size, file) != size)
 		return NULL; //TODO: implement error handling
 	fclose(file);
 	
@@ -612,8 +618,8 @@ void createGraphicsPipeline()
 	rasterizerInfo.depthClampEnable = VK_FALSE;
 	rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
 	rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
-	//rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+	//rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
+	rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizerInfo.depthBiasEnable = VK_FALSE;
 	
@@ -662,7 +668,7 @@ void createGraphicsPipeline()
 	pipelineInfo.layout = pipelineLayout;
 	
 	if(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline) == VK_SUCCESS)
-		printf("Created Graphics Pipeline: %hu x %hu\n", width, height);
+		printf("Created Graphics Pipeline: %u x %u\n", width, height);
 	
 	vkDestroyShaderModule(device, fragmentShader, NULL);
 	vkDestroyShaderModule(device, vertexShader, NULL);
