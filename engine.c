@@ -17,6 +17,13 @@ struct vertex
 	float col[3];
 };
 
+struct uniformBufferObject
+{
+    float model[4];
+    float view[4];
+    float proj[4];
+};
+
 struct swapchainDetails
 {
 	VkSurfaceCapabilitiesKHR capabilities;
@@ -26,6 +33,7 @@ struct swapchainDetails
 };
 
 typedef struct vertex Vertex;
+typedef struct uniformBufferObject UniformBufferObject;
 typedef struct swapchainDetails SwapchainDetails;
 
 uint32_t width, height;
@@ -49,6 +57,7 @@ VkExtent2D swapchainExtent;
 VkImage *swapchainImages;
 VkImageView *swapchainViews;
 VkRenderPass renderPass;
+VkDescriptorSetLayout descriptorSetLayout;
 VkPipelineLayout pipelineLayout;
 VkPipeline graphicsPipeline;
 VkFramebuffer *swapchainFramebuffers;
@@ -56,7 +65,9 @@ VkDeviceSize vertexCount, vertexSize, indexCount, indexSize;
 Vertex *vertices;
 uint16_t *indices;
 VkBuffer vertexBuffer, indexBuffer;
+VkBuffer *uniformBuffers;
 VkDeviceMemory vertexBufferMemory, indexBufferMemory;
+VkDeviceMemory *uniformBufferMemories;
 VkCommandPool commandPool;
 VkCommandBuffer *commandBuffers;
 VkSemaphore *imageAvailable, *renderFinished;
@@ -163,6 +174,7 @@ void createSurface()
 	surfaceInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
 	surfaceInfo.connection = xconn;
 	surfaceInfo.window = window;
+	
 	if(vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS)
 		printf("Created Surface: XCB Surface\n");
 }
@@ -187,6 +199,7 @@ void pickPhysicalDevice()
 	int32_t maxScore = -1, bestIndex = -1;
 	uint32_t deviceCount;
 	char *deviceName = malloc(VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+	
 	vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
 	VkPhysicalDevice *devices = malloc(deviceCount * sizeof(VkPhysicalDevice));
 	vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
@@ -449,6 +462,23 @@ void createRenderPass()
 		printf("Created Render Pass: Subpass Count = %u\n", renderPassInfo.subpassCount);
 }
 
+void createDescriptorSetLayout()
+{
+	VkDescriptorSetLayoutBinding uniformBufferBinding = {0};
+	uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uniformBufferBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	uniformBufferBinding.descriptorCount = 1;
+	uniformBufferBinding.binding = 0;
+	
+	VkDescriptorSetLayoutCreateInfo layoutInfo = {0};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 1;
+	layoutInfo.pBindings = &uniformBufferBinding;
+	
+	if(vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) == VK_SUCCESS)
+		printf("Created Descriptor Set Layout: Binding Count = %d\n", layoutInfo.bindingCount);
+}
+
 VkShaderModule initializeShaderModule(const char* shaderName, const char* filePath)
 {
 	FILE *file = fopen(filePath, "rb");
@@ -589,8 +619,11 @@ void createGraphicsPipeline()
 	
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {0};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+	
 	if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout) == VK_SUCCESS)
-		printf("Created Pipeline Layout: Empty\n");
+		printf("Created Pipeline Layout: Set Layout Count = %d\n", pipelineLayoutInfo.setLayoutCount);
 	
 	VkPipelineShaderStageCreateInfo shaderStages[] = {vertexStageInfo, fragmentStageInfo};
 	VkGraphicsPipelineCreateInfo pipelineInfo = {0};
@@ -618,6 +651,7 @@ void createGraphicsPipeline()
 void createFramebuffers()
 {
 	swapchainFramebuffers = malloc(framebufferSize * sizeof(VkFramebuffer));
+	
 	for(uint32_t framebufferIndex = 0; framebufferIndex < framebufferSize; framebufferIndex++)
 	{
 		VkFramebufferCreateInfo framebufferInfo = {0};
@@ -628,6 +662,7 @@ void createFramebuffers()
 		framebufferInfo.pAttachments = &swapchainViews[framebufferIndex];
 		framebufferInfo.width = swapchainExtent.width;
 		framebufferInfo.height = swapchainExtent.height;
+		
 		if(vkCreateFramebuffer(device, &framebufferInfo, NULL,
 		 &swapchainFramebuffers[framebufferIndex]) == VK_SUCCESS)
 			printf("Created Framebuffer: Number = %u\n", framebufferIndex);
@@ -639,6 +674,7 @@ void createCommandPool()
 	VkCommandPoolCreateInfo poolInfo = {0};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.queueFamilyIndex = graphicsIndex;
+	
 	if(vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) == VK_SUCCESS)
 		printf("Created Command Pool: Queue Index = %u\n", graphicsIndex);
 }
@@ -788,6 +824,18 @@ void createIndexBuffer()
 	vkDestroyBuffer(device, stagingBuffer, NULL);
 }
 
+void createUniformBuffers()
+{
+	uniformBuffers = malloc(framebufferSize * sizeof(VkBuffer));
+	uniformBufferMemories = malloc(framebufferSize * sizeof(VkDeviceMemory));
+	
+	for(size_t uniformIndex = 0; uniformIndex < framebufferSize; uniformIndex++)
+		createBuffer(sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		 &uniformBuffers[uniformIndex], &uniformBufferMemories[uniformIndex]);
+	printf("Created Uniform Buffers: Count = %d\n", framebufferSize);
+}
+
 void createCommandBuffers()
 {
 	commandBuffers = malloc(framebufferSize * sizeof(VkCommandBuffer));
@@ -796,6 +844,7 @@ void createCommandBuffers()
 	allocateInfo.commandPool = commandPool;
 	allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocateInfo.commandBufferCount = framebufferSize;
+	
 	if(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers) == VK_SUCCESS)
 		printf("Allocated Command Buffers: Size = %u\n", framebufferSize);
 	
@@ -804,6 +853,7 @@ void createCommandBuffers()
 		VkCommandBufferBeginInfo beginInfo = {0};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+		
 		if(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS)
 			printf("Started Command Buffer Recording: Index = %u\n", commandIndex);
 		
@@ -881,16 +931,18 @@ void setup()
 	createSwapchain();
 	createImageViews();
 	createRenderPass();
+	createDescriptorSetLayout();
 	createGraphicsPipeline();
 	createFramebuffers();
 	createCommandPool();
 	createVertexBuffer();
 	createIndexBuffer();
+	createUniformBuffers();
 	createCommandBuffers();
 	createSyncObjects();
 }
 
-xcb_atom_t windowEvent()
+inline xcb_atom_t windowEvent()
 {
 	event = xcb_poll_for_event(xconn);
 	
@@ -919,6 +971,11 @@ xcb_atom_t windowEvent()
 	return !destroyEvent;
 }
 
+void updateUniformBuffer(int index)
+{
+	//TODO: implement rotation
+}
+
 void draw()
 {
 	uint32_t currentFrame = 0, frameCount = 0;
@@ -935,6 +992,8 @@ void draw()
 			recreateSwapchain();
 			continue;
 		}
+		
+		updateUniformBuffer(imageIndex);
 		
 		VkSemaphore waitSemaphores[] = {imageAvailable[currentFrame]};
 		VkSemaphore signalSemaphores[] = {renderFinished[currentFrame]};
@@ -997,14 +1056,20 @@ void clean()
 		vkDestroySemaphore(device, imageAvailable[syncIndex], NULL);
 	}
 	vkDestroyCommandPool(device, commandPool, NULL);
-	vkFreeMemory(device, indexBufferMemory, NULL);
+	for(size_t uniformIndex = 0; uniformIndex < framebufferSize; uniformIndex++)
+	{
+		vkDestroyBuffer(device, uniformBuffers[uniformIndex], NULL);
+		vkFreeMemory(device, uniformBufferMemories[uniformIndex], NULL);
+	}
 	vkDestroyBuffer(device, indexBuffer, NULL);
-	vkFreeMemory(device, vertexBufferMemory, NULL);
+	vkFreeMemory(device, indexBufferMemory, NULL);
 	vkDestroyBuffer(device, vertexBuffer, NULL);
+	vkFreeMemory(device, vertexBufferMemory, NULL);
 	for(uint32_t framebufferIndex = 0; framebufferIndex < framebufferSize; framebufferIndex++)
 		vkDestroyFramebuffer(device, swapchainFramebuffers[framebufferIndex], NULL);
 	vkDestroyPipeline(device, graphicsPipeline, NULL);
 	vkDestroyPipelineLayout(device, pipelineLayout, NULL);
+	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
 	vkDestroyRenderPass(device, renderPass, NULL);
 	for(uint32_t viewIndex = 0; viewIndex < framebufferSize; viewIndex++)
 		vkDestroyImageView(device, swapchainViews[viewIndex], NULL);
