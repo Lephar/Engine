@@ -1,4 +1,5 @@
 #include <time.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,8 @@
 #include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
 //#include "libraries/device_support.h"
+
+# define PI 3.14159265358979f
 
 struct vertex
 {
@@ -971,6 +974,62 @@ inline xcb_atom_t windowEvent()
 	return !destroyEvent;
 }
 
+void scale(float* M, float x, float y, float z)
+{
+	float K[] = {
+		x,    0.0f, 0.0f, 0.0f,
+		0.0f, y,    0.0f, 0.0f,
+		0.0f, 0.0f, z,    0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	}, T[16];
+
+	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
+	 &(float){1.0f}, K, 4, 1, M, 4, 1, &(float){0.0f}, T, 4, 1);
+	memcpy(M, T, sizeof(T));
+	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
+}
+
+void translate(float* M, float x, float y, float z)
+{
+	float K[] = {
+		1.0f, 0.0f, 0.0f, x,
+		0.0f, 1.0f, 0.0f, y,
+		0.0f, 0.0f, 1.0f, z,
+		0.0f, 0.0f, 0.0f, 1.0f
+	}, T[16];
+
+	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
+	 &(float){1.0f}, K, 4, 1, M, 4, 1, &(float){0.0f}, T, 4, 1);
+	memcpy(M, T, sizeof(T));
+	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
+}
+
+void rotate(float* M, float x, float y, float z, float th)
+{
+	float mag = sqrtf(x * x + y * y + z * z), eps = 0.0009765625f; //Epsilon = 2 ^ -10
+	if(abs(1.0f - mag) > eps)
+	{
+		x /= mag;
+		y /= mag;
+		z /= mag;
+	}
+
+	float xx = x * x, xy = x * y, xz = x * z, yy = y * y, yz = y * z, zz = z * z;
+	float st = sinf(th), ct = cosf(th), rct = 1 - cosf(th);
+
+	float K[] = {
+		ct + xx * rct,     xy * rct - z * st, xz * rct + y * st, 0,
+		xy * rct + z * st, ct + yy * rct,     yz * rct - x * st, 0,
+		xz * rct - y * st, yz * rct + x * st, ct + zz * rct,     0,
+		0,                 0,                 0,                 1
+	}, T[16];
+
+	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
+	 &(float){1.0f}, K, 4, 1, M, 4, 1, &(float){0.0f}, T, 4, 1);
+	memcpy(M, T, sizeof(T));
+	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
+}
+
 void updateUniformBuffer(int index)
 {
 	//TODO: implement rotation
@@ -979,7 +1038,7 @@ void updateUniformBuffer(int index)
 void draw()
 {
 	uint32_t currentFrame = 0, frameCount = 0;
-	
+
 	while(windowEvent() != destroyEvent)
 	{	
 		vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, ULONG_MAX);
