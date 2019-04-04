@@ -1112,8 +1112,8 @@ void camera(float M[], float eye[], float center[], float top[])
 	normalize(&left[0], &left[1], &left[2]);
 
 	float forwm[] = {
-		 0.0f,  -forward[2], forward[1],
-		 forward[2], 0.0f,  -forward[0],
+		 0.0f,      -forward[2], forward[1],
+		 forward[2], 0.0f,      -forward[0],
 		-forward[1], forward[0], 0.0f
 	}, up[3];
 
