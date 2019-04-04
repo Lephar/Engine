@@ -22,9 +22,9 @@ struct vertex
 
 struct uniformBufferObject
 {
-    float model[16];
-    float view[16];
-    float proj[16];
+	float model[16];
+	float view[16];
+	float proj[16];
 };
 
 struct swapchainDetails
@@ -145,8 +145,8 @@ void registerMessenger()
 
 void createWindow()
 {
-	width = 240;
-	height = 240;
+	width = 640;
+	height = 640;
 	xconn = xcb_connect(NULL, NULL);
 	xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(xconn)).data;
 	window = xcb_generate_id(xconn);
@@ -594,8 +594,8 @@ void createGraphicsPipeline()
 	rasterizerInfo.depthClampEnable = VK_FALSE;
 	rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
 	rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	//rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
-	rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
+	//rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizerInfo.depthBiasEnable = VK_FALSE;
 	
@@ -761,14 +761,14 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 
 void createVertexBuffer()
 {
-	/*Vertex buffer[] = {
+	Vertex buffer[] = {
 		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
 		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
 		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
-	};*/
+	};
 
-	Vertex buffer[] = {
+	/*Vertex buffer[] = {
 		{{0.0f, 0.8f}, {0.8f, 0.4f, 0.0f}},
 		{{-0.7f, -0.2f}, {0.8f, 0.4f, 0.0f}},
 		{{0.7f, -0.2f}, {0.8f, 0.4f, 0.0f}},
@@ -776,7 +776,7 @@ void createVertexBuffer()
 		{{-0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
 		{{0.7f, -0.8f}, {0.8f, 0.4f, 0.0f}},
 		{{0.9f, 0.0f}, {0.8f, 0.4f, 0.0f}}
-	};
+	};*/
 
 	vertices = buffer;
 	vertexSize = sizeof(Vertex);
@@ -803,8 +803,8 @@ void createVertexBuffer()
 
 void createIndexBuffer()
 {
-	//uint16_t buffer[] = {0, 1, 2, 2, 3, 0};
-	uint16_t buffer[] = {0, 1, 2, 0, 3, 4, 0, 5, 6};
+	uint16_t buffer[] = {0, 1, 2, 2, 3, 0};
+	//uint16_t buffer[] = {0, 1, 2, 0, 3, 4, 0, 5, 6};
 
 	indices = buffer;
 	indexSize = sizeof(uint16_t);
@@ -999,7 +999,7 @@ void setup()
 	createIndexBuffer();
 	createUniformBuffers();
 	createDescriptorPool();
-    createDescriptorSets();
+	createDescriptorSets();
 	createCommandBuffers();
 	createSyncObjects();
 }
@@ -1033,6 +1033,19 @@ inline xcb_atom_t windowEvent()
 	return !destroyEvent;
 }
 
+void normalize(float* x, float* y, float* z)
+{
+	const float eps = 0.0009765625f; //Epsilon = 2 ^ -10
+	float mag = sqrtf(*x * *x + *y * *y + *z * *z);
+
+	if(abs(1.0f - mag) > eps)
+	{
+		*x /= mag;
+		*y /= mag;
+		*z /= mag;
+	}
+}
+
 void scale(float M[], float x, float y, float z)
 {
 	float K[] = {
@@ -1051,10 +1064,10 @@ void scale(float M[], float x, float y, float z)
 void translate(float M[], float x, float y, float z)
 {
 	float K[] = {
-		1.0f, 0.0f, 0.0f, x,
-		0.0f, 1.0f, 0.0f, y,
-		0.0f, 0.0f, 1.0f, z,
-		0.0f, 0.0f, 0.0f, 1.0f
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		x,    y,    z,    1.0f
 	}, T[16];
 
 	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
@@ -1065,50 +1078,81 @@ void translate(float M[], float x, float y, float z)
 
 void rotate(float M[], float x, float y, float z, float th)
 {
-	float mag = sqrtf(x * x + y * y + z * z), eps = 0.0009765625f; //Epsilon = 2 ^ -10
-	if(abs(1.0f - mag) > eps)
-	{
-		x /= mag;
-		y /= mag;
-		z /= mag;
-	}
+	normalize(&x, &y, &z);
 
 	float xx = x * x, xy = x * y, xz = x * z, yy = y * y, yz = y * z, zz = z * z;
 	float st = sinf(th), ct = cosf(th), rct = 1 - cosf(th);
 
 	float K[] = {
-		ct + xx * rct,     xy * rct - z * st, xz * rct + y * st, 0,
-		xy * rct + z * st, ct + yy * rct,     yz * rct - x * st, 0,
-		xz * rct - y * st, yz * rct + x * st, ct + zz * rct,     0,
-		0,                 0,                 0,                 1
+		ct + xx * rct,     xy * rct - z * st, xz * rct + y * st, 0.0f,
+		xy * rct + z * st, ct + yy * rct,     yz * rct - x * st, 0.0f,
+		xz * rct - y * st, yz * rct + x * st, ct + zz * rct,     0.0f,
+		0.0f,              0.0f,              0.0f,              1.0f
 	}, T[16];
 
 	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
 	 &(float){1.0f}, K, 4, 1, M, 4, 1, &(float){0.0f}, T, 4, 1);
 	memcpy(M, T, sizeof(T));
-	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
+	//bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
 }
 
-void camera()
+void camera(float M[], float eye[], float center[], float top[])
 {
-	//TODO: implement this
+	float forward[] = {eye[0] - center[0], eye[1] - center[1], eye[2] - center[2]};
+	normalize(&forward[0], &forward[1], &forward[2]);
+
+	float topm[] = {
+		 0.0f,  -top[2], top[1],
+		 top[2], 0.0f,  -top[0],
+		-top[1], top[0], 0.0f
+	}, left[3];
+
+	bli_sgemv(BLIS_NO_TRANSPOSE, BLIS_NO_CONJUGATE, 3, 3,
+	 &(float){1.0f}, topm, 3, 1, forward, 1, &(float){0.0f}, left, 1);
+	normalize(&left[0], &left[1], &left[2]);
+
+	float forwm[] = {
+		 0.0f,  -forward[2], forward[1],
+		 forward[2], 0.0f,  -forward[0],
+		-forward[1], forward[0], 0.0f
+	}, up[3];
+
+	bli_sgemv(BLIS_NO_TRANSPOSE, BLIS_NO_CONJUGATE, 3, 3,
+	 &(float){1.0f}, forwm, 3, 1, left, 1, &(float){0.0f}, up, 1);
+	normalize(&up[0], &up[1], &up[2]);
+	
+	float rotm[] = {
+		left[0],    left[1],    left[2],    0.0f,
+		up[0],      up[1],      up[2],      0.0f,
+		forward[0], forward[1], forward[2], 0.0f,
+		0.0f,       0.0f,       0.0f,       1.0f
+	}, transm[] = {
+		1.0f,       0.0f,       0.0f,      -eye[0],
+		0.0f,       1.0f,       0.0f,      -eye[1],
+		0.0f,       0.0f,       1.0f,      -eye[2],
+		0.0f,       0.0f,       0.0f,       1.0f
+	};
+
+	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
+	 &(float){1.0f}, rotm, 4, 1, transm, 4, 1, &(float){0.0f}, M, 4, 1);
 }
 
 void perspective()
 {
-	//TODO: and this...
+	//TODO: implement this
 }
 
 void updateUniformBuffer(int index)
 {
 	static float theta = 0.0f;
-	theta += 0.01f;
 	UniformBufferObject ubo = {0};
 	ubo.model[0] = ubo.model[5] = ubo.model[10] = ubo.model[15] =
 	 ubo.view[0] = ubo.view[5] = ubo.view[10] = ubo.view[15] =
 	 ubo.proj[0] = ubo.proj[5] = ubo.proj[10] = ubo.proj[15] = 1.0f;
 
+	theta += 0.01f;
 	rotate(ubo.model, 0, 0, 1, theta);
+	camera(ubo.view, (float[]){0.0f, -1.0f, 1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
