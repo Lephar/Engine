@@ -12,7 +12,7 @@
 #include "libraries/tinyobj_loader_c.h"
 //#include "libraries/device_support.h"
 
-# define PI 3.14159265358979f
+#define PI 3.14159265358979f
 
 struct vertex
 {
@@ -22,9 +22,9 @@ struct vertex
 
 struct uniformBufferObject
 {
-    float model[4];
-    float view[4];
-    float proj[4];
+    float model[16];
+    float view[16];
+    float proj[16];
 };
 
 struct swapchainDetails
@@ -73,6 +73,8 @@ VkDeviceMemory vertexBufferMemory, indexBufferMemory;
 VkDeviceMemory *uniformBufferMemories;
 VkCommandPool commandPool;
 VkCommandBuffer *commandBuffers;
+VkDescriptorPool descriptorPool;
+VkDescriptorSet *descriptorSets;
 VkSemaphore *imageAvailable, *renderFinished;
 VkFence *frameFences;
 
@@ -827,6 +829,59 @@ void createIndexBuffer()
 	vkDestroyBuffer(device, stagingBuffer, NULL);
 }
 
+void createDescriptorPool()
+{
+	VkDescriptorPoolSize poolSize = {0};
+	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.descriptorCount = framebufferSize;
+
+	VkDescriptorPoolCreateInfo poolInfo = {0};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.maxSets = framebufferSize;
+
+	if(vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) == VK_SUCCESS)
+		printf("Created Descriptor Pool: Size = %u\n", framebufferSize);
+}
+
+void createDescriptorSets()
+{
+	VkDescriptorSetLayout *layouts = malloc(framebufferSize * sizeof(VkDescriptorSetLayout));
+	for(uint32_t layoutIndex = 0; layoutIndex < framebufferSize; layoutIndex++)
+		layouts[layoutIndex] = descriptorSetLayout;
+
+	VkDescriptorSetAllocateInfo descriptorSetInfo = {0};
+	descriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	descriptorSetInfo.descriptorPool = descriptorPool;
+	descriptorSetInfo.descriptorSetCount = framebufferSize;
+	descriptorSetInfo.pSetLayouts = layouts;
+
+	descriptorSets = malloc(framebufferSize * sizeof(VkDescriptorSet));
+	if(vkAllocateDescriptorSets(device, &descriptorSetInfo, descriptorSets) == VK_SUCCESS)
+		printf("Allocated Descriptor Sets: Size = %u\n", framebufferSize);
+
+	for(uint32_t layoutIndex = 0; layoutIndex < framebufferSize; layoutIndex++)
+	{
+		VkDescriptorBufferInfo bufferInfo = {0};
+		bufferInfo.buffer = uniformBuffers[layoutIndex];
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(UniformBufferObject);
+
+		VkWriteDescriptorSet descriptorWrite = {};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = descriptorSets[layoutIndex];
+		descriptorWrite.dstBinding = 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo = &bufferInfo;
+
+		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, NULL);
+		printf("Updated Descriptor Set: Index = %u\n", layoutIndex);
+	}
+}
+
 void createUniformBuffers()
 {
 	uniformBuffers = malloc(framebufferSize * sizeof(VkBuffer));
@@ -877,6 +932,8 @@ void createCommandBuffers()
 		VkBuffer vertexBuffers[] = {vertexBuffer};
 		vkCmdBindVertexBuffers(commandBuffers[commandIndex], 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
+		 pipelineLayout, 0, 1, &descriptorSets[commandIndex], 0, NULL);
 		vkCmdDrawIndexed(commandBuffers[commandIndex], indexCount, 1, 0, 0, 0);
 		
 		vkCmdEndRenderPass(commandBuffers[commandIndex]);
@@ -941,6 +998,8 @@ void setup()
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
+	createDescriptorPool();
+    createDescriptorSets();
 	createCommandBuffers();
 	createSyncObjects();
 }
@@ -974,7 +1033,7 @@ inline xcb_atom_t windowEvent()
 	return !destroyEvent;
 }
 
-void scale(float* M, float x, float y, float z)
+void scale(float M[], float x, float y, float z)
 {
 	float K[] = {
 		x,    0.0f, 0.0f, 0.0f,
@@ -986,10 +1045,10 @@ void scale(float* M, float x, float y, float z)
 	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
 	 &(float){1.0f}, K, 4, 1, M, 4, 1, &(float){0.0f}, T, 4, 1);
 	memcpy(M, T, sizeof(T));
-	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
+	//bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
 }
 
-void translate(float* M, float x, float y, float z)
+void translate(float M[], float x, float y, float z)
 {
 	float K[] = {
 		1.0f, 0.0f, 0.0f, x,
@@ -1001,10 +1060,10 @@ void translate(float* M, float x, float y, float z)
 	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
 	 &(float){1.0f}, K, 4, 1, M, 4, 1, &(float){0.0f}, T, 4, 1);
 	memcpy(M, T, sizeof(T));
-	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
+	//bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
 }
 
-void rotate(float* M, float x, float y, float z, float th)
+void rotate(float M[], float x, float y, float z, float th)
 {
 	float mag = sqrtf(x * x + y * y + z * z), eps = 0.0009765625f; //Epsilon = 2 ^ -10
 	if(abs(1.0f - mag) > eps)
@@ -1030,9 +1089,31 @@ void rotate(float* M, float x, float y, float z, float th)
 	bli_sprintm("", 4, 4, M, 4, 1, "%.2f", "");
 }
 
+void camera()
+{
+	//TODO: implement this
+}
+
+void perspective()
+{
+	//TODO: and this...
+}
+
 void updateUniformBuffer(int index)
 {
-	//TODO: implement rotation
+	static float theta = 0.0f;
+	theta += 0.01f;
+	UniformBufferObject ubo = {0};
+	ubo.model[0] = ubo.model[5] = ubo.model[10] = ubo.model[15] =
+	 ubo.view[0] = ubo.view[5] = ubo.view[10] = ubo.view[15] =
+	 ubo.proj[0] = ubo.proj[5] = ubo.proj[10] = ubo.proj[15] = 1.0f;
+
+	rotate(ubo.model, 0, 0, 1, theta);
+
+	void *data;
+	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
+	memcpy(data, &ubo, sizeof(ubo));
+	vkUnmapMemory(device, uniformBufferMemories[index]);
 }
 
 void draw()
@@ -1087,7 +1168,6 @@ void draw()
 		currentFrame = ++frameCount % framebufferLimit;
 	}
 	
-	free(event);
 	vkDeviceWaitIdle(device);
 }
 
@@ -1114,7 +1194,7 @@ void clean()
 		vkDestroySemaphore(device, renderFinished[syncIndex], NULL);
 		vkDestroySemaphore(device, imageAvailable[syncIndex], NULL);
 	}
-	vkDestroyCommandPool(device, commandPool, NULL);
+	vkDestroyDescriptorPool(device, descriptorPool, NULL);
 	for(size_t uniformIndex = 0; uniformIndex < framebufferSize; uniformIndex++)
 	{
 		vkDestroyBuffer(device, uniformBuffers[uniformIndex], NULL);
@@ -1126,6 +1206,8 @@ void clean()
 	vkFreeMemory(device, vertexBufferMemory, NULL);
 	for(uint32_t framebufferIndex = 0; framebufferIndex < framebufferSize; framebufferIndex++)
 		vkDestroyFramebuffer(device, swapchainFramebuffers[framebufferIndex], NULL);
+	vkFreeCommandBuffers(device, commandPool, framebufferSize, commandBuffers);
+	vkDestroyCommandPool(device, commandPool, NULL);
 	vkDestroyPipeline(device, graphicsPipeline, NULL);
 	vkDestroyPipelineLayout(device, pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
