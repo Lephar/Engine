@@ -22,4 +22,3 @@ $(FMODS): $(FSHADES)
 
 clean:
 	rm $(OBJECTS) $(VMODS) $(FMODS)
-
