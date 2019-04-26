@@ -10,9 +10,9 @@
 #include <blis/blis.h>
 #include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
-//#include "libraries/device_support.h"
 
 #define PI 3.14159265358979f
+#define varname(variable) (#variable)
 
 struct vertex
 {
@@ -116,10 +116,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
 {
 	(void)type;
+	(void)severity;
 	(void)pUserData;
 
-	if(severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
-		printf("%s\n", pCallbackData->pMessage);
+	printf("%s\n", pCallbackData->pMessage);
 	return VK_FALSE;
 }
 
@@ -386,9 +386,8 @@ void createSwapchain()
 	swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	if(graphicsIndex != presentIndex)
 	{
-		uint32_t queueIndices[] = {graphicsIndex, presentIndex};
 		swapchainInfo.queueFamilyIndexCount = 2;
-		swapchainInfo.pQueueFamilyIndices = queueIndices;
+		swapchainInfo.pQueueFamilyIndices = (uint32_t[]){graphicsIndex, presentIndex};
 		swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 	}
 
@@ -492,8 +491,8 @@ VkShaderModule initializeShaderModule(const char* shaderName, const char* filePa
 	rewind(file);
 
 	uint32_t *shaderData = calloc(size, 1);
-	if(fread(shaderData, 1, size, file) != size)
-		return NULL; //TODO: implement error handling
+	if(fread(shaderData, 1, size, file) == size)
+		printf("Read %s Shader File: %zd bytes\n", shaderName, size);
 	fclose(file);
 
 	VkShaderModuleCreateInfo shaderInfo = {0};
@@ -554,14 +553,13 @@ void createGraphicsPipeline()
 	fragmentStageInfo.pName = "main";
 
 	VkVertexInputBindingDescription inputBinding = generateVertexInputBinding();
-	VkVertexInputAttributeDescription inputAttributes[] =
-	 {generatePositionInputAttributes(), generateColorInputAttributes()};
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {0};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
 	vertexInputInfo.vertexAttributeDescriptionCount = 2;
 	vertexInputInfo.pVertexBindingDescriptions = &inputBinding;
-	vertexInputInfo.pVertexAttributeDescriptions = inputAttributes;
+	vertexInputInfo.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription[])
+	 {generatePositionInputAttributes(), generateColorInputAttributes()};
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {0};
 	inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -594,6 +592,7 @@ void createGraphicsPipeline()
 	rasterizerInfo.depthClampEnable = VK_FALSE;
 	rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
 	rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
+	//rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
 	rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizerInfo.depthBiasEnable = VK_FALSE;
@@ -629,14 +628,13 @@ void createGraphicsPipeline()
 	if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout) == VK_SUCCESS)
 		printf("Created Pipeline Layout: Set Layout Count = %d\n", pipelineLayoutInfo.setLayoutCount);
 
-	VkPipelineShaderStageCreateInfo shaderStages[] = {vertexStageInfo, fragmentStageInfo};
 	VkGraphicsPipelineCreateInfo pipelineInfo = {0};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	pipelineInfo.renderPass = renderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.stageCount = 2;
-	pipelineInfo.pStages = shaderStages;
+	pipelineInfo.pStages = (VkPipelineShaderStageCreateInfo[]){vertexStageInfo, fragmentStageInfo};
 	pipelineInfo.pVertexInputState = &vertexInputInfo;
 	pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
 	pipelineInfo.pViewportState = &viewportStateInfo;
@@ -903,16 +901,14 @@ void createCommandBuffers()
 		if(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS)
 			printf("Started Command Buffer Recording: Index = %u\n", commandIndex);
 
-		VkOffset2D offset = {0};
-		VkClearValue backgroundColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
 		VkRenderPassBeginInfo renderPassBeginInfo = {0};
 		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassBeginInfo.renderPass = renderPass;
 		renderPassBeginInfo.framebuffer = swapchainFramebuffers[commandIndex];
-		renderPassBeginInfo.renderArea.offset = offset;
+		renderPassBeginInfo.renderArea.offset = (VkOffset2D){0};
 		renderPassBeginInfo.renderArea.extent = swapchainExtent;
 		renderPassBeginInfo.clearValueCount = 1;
-		renderPassBeginInfo.pClearValues = &backgroundColor;
+		renderPassBeginInfo.pClearValues = &(VkClearValue){{{0.0f, 0.0f, 0.0f, 1.0f}}};
 		vkCmdBeginRenderPass(commandBuffers[commandIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
@@ -1021,12 +1017,18 @@ inline xcb_atom_t windowEvent()
 	return !destroyEvent;
 }
 
+void identity(float M[])
+{
+	memset(M, 0, 16);
+	M[0] = M[5] = M[10] = M[15] = 1.0f;
+}
+
 void normalize(float* x, float* y, float* z)
 {
 	const float eps = 0.0009765625f; //Epsilon = 2 ^ -10
 	float mag = sqrtf(*x * *x + *y * *y + *z * *z);
 
-	if(fabsf(0.0f - mag) > eps && fabsf(1.0f - mag) > eps)
+	if(mag > eps && fabsf(1.0f - mag) > eps)
 	{
 		*x /= mag;
 		*y /= mag;
@@ -1034,9 +1036,16 @@ void normalize(float* x, float* y, float* z)
 	}
 }
 
-void identity(float M[])
+float dot(float a[], float b[])
 {
-	M[0] = M[5] = M[10] = M[15] = 1.0f;
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+void cross(float a[], float b[], float c[])
+{
+	c[0] = a[1] * b[2] - a[2] * b[1];
+	c[1] = a[2] * b[0] - a[0] * b[2];
+	c[2] = a[0] * b[1] - a[1] * b[0];
 }
 
 void scale(float M[], float x, float y, float z)
@@ -1086,20 +1095,54 @@ void rotate(float M[], float x, float y, float z, float th)
 	memcpy(M, T, sizeof(T));
 }
 
+void camera(float M[], float eye[], float cent[], float top[])
+{
+	float fwd[] = {cent[0] - eye[0], cent[1] - eye[1], cent[2] - eye[2]};
+	normalize(&fwd[0], &fwd[1], &fwd[2]);
+
+	float left[3];
+	cross(fwd, top, left);
+	normalize(&left[0], &left[1], &left[2]);
+
+	float up[3];
+	cross(left, fwd, up);
+
+	float T[] = {
+		 left[0],         up[0],        -fwd[0],        0.0f,
+		 left[1],         up[1],        -fwd[1],        0.0f,
+		 left[2],         up[2],        -fwd[2],        0.0f,
+		-dot(left, eye), -dot(up, eye),  dot(fwd, eye), 1.0f
+	};
+
+	memcpy(M, T, sizeof(T));
+	bli_sprintm("Camera:", 4, 4, M, 4, 1, "% .2f", "");
+}
+
+void perspective(float M[], float fovy, float asp, float n, float f)
+{
+	float t = tanf(fovy / 2);
+
+	float T[] = {
+		1 / (asp * t),    0.0f,             0.0f,             0.0f,
+		0.0f,            -1 / t,            0.0f,             0.0f,
+		0.0f,             0.0f,             f / (n - f),     -1.0f,
+		0.0f,             0.0f,             n * f / (n - f),  0.0f
+	};
+
+	memcpy(M, T, sizeof(T));
+	bli_sprintm("Perspective:", 4, 4, M, 4, 1, "% .2f", "");
+}
+
 void updateUniformBuffer(int index)
 {
-	static float theta = 0.0f, delta = -1.0f;
+	static float theta = 0.0f;
 	UniformBufferObject ubo = {0};
 
-	identity(ubo.model);
-	identity(ubo.view);
-	identity(ubo.proj);
-
 	theta += 0.01f;
-	delta += 0.01f;
+	identity(ubo.model);
 	rotate(ubo.model, 0, 0, 1, theta);
-	//camera(ubo.view, (float[]){0.0f, delta, -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
-	//perspective(ubo.proj, PI/2, swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+	camera(ubo.view, (float[]){sin(theta), cos(theta), -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
+	perspective(ubo.proj, sin(theta * 2) * PI / 4 + PI / 2, swapchainExtent.width / (float)swapchainExtent.height, 0.0f, 10.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
@@ -1128,29 +1171,28 @@ void draw()
 
 		VkSemaphore waitSemaphores[] = {imageAvailable[currentFrame]};
 		VkSemaphore signalSemaphores[] = {renderFinished[currentFrame]};
-		VkPipelineStageFlags stageFlags[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
 		VkSubmitInfo submitInfo = {0};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.waitSemaphoreCount = 1;
 		submitInfo.pWaitSemaphores = waitSemaphores;
-		submitInfo.pWaitDstStageMask = stageFlags;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+		submitInfo.pWaitDstStageMask = (VkPipelineStageFlags[])
+		 {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
 		vkResetFences(device, 1, &frameFences[currentFrame]);
 		vkQueueSubmit(graphicsQueue, 1, &submitInfo, frameFences[currentFrame]);
 
-		VkSwapchainKHR swapchains[] = {swapchain};
 		VkPresentInfoKHR presentInfo = {0};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.pImageIndices = &imageIndex;
 		presentInfo.waitSemaphoreCount = 1;
 		presentInfo.pWaitSemaphores = signalSemaphores;
 		presentInfo.swapchainCount = 1;
-		presentInfo.pSwapchains = swapchains;
-		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pSwapchains = (VkSwapchainKHR[]){swapchain};
 
 		VkResult presentResult = vkQueuePresentKHR(presentQueue, &presentInfo);
 		if(presentResult == VK_SUBOPTIMAL_KHR || presentResult == VK_ERROR_OUT_OF_DATE_KHR)
