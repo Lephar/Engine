@@ -1110,10 +1110,10 @@ void camera(float m[], float eye[], float cent[], float top[])
 	cross(left, fwd, up);
 
 	float k[] = {
-		 left[0],         up[0],        -fwd[0],        0.0f,
-		 left[1],         up[1],        -fwd[1],        0.0f,
-		 left[2],         up[2],        -fwd[2],        0.0f,
-		-dot(left, eye), -dot(up, eye),  dot(fwd, eye), 1.0f
+		 left[0],         up[0],          -fwd[0],          0.0f,
+		 left[1],         up[1],          -fwd[1],          0.0f,
+		 left[2],         up[2],          -fwd[2],          0.0f,
+		-dot(left, eye), -dot(up, eye),    dot(fwd, eye),   1.0f
 	};
 
 	memcpy(m, k, sizeof(k));
