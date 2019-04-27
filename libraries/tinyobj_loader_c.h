@@ -1,7 +1,7 @@
 /*
    The MIT License (MIT)
 
-   Copyright (c) 2016 Syoyo Fujita and many contributors.
+   Copyright (c) 2016 - 2019 Syoyo Fujita and many contributors.
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -396,24 +396,32 @@ static int tryParseDouble(const char *s, const char *s_end, double *result) {
       read++;
       end_not_reached = (curr != s_end);
     }
-    exponent *= (exp_sign == '+' ? 1 : -1);
     if (read == 0) goto fail;
   }
 
 assemble :
 
   {
-    /* = pow(5.0, exponent); */
-    double a = 1.0;
+    double a = 1.0; /* = pow(5.0, exponent); */
+    double b  = 1.0; /* = 2.0^exponent */
     int i;
     for (i = 0; i < exponent; i++) {
       a = a * 5.0;
     }
+
+    for (i = 0; i < exponent; i++) {
+      b = b * 2.0;
+    }
+
+    if (exp_sign == '-') {
+      a = 1.0 / a;
+      b = 1.0 / b;
+    }
+
     *result =
       /* (sign == '+' ? 1 : -1) * ldexp(mantissa * pow(5.0, exponent),
          exponent); */
-      (sign == '+' ? 1 : -1) * (mantissa * a) *
-      (double)(1 << exponent); /* 5.0^exponent * 2^exponent */
+      (sign == '+' ? 1 : -1) * (mantissa * a * b);
   }
 
   return 1;
@@ -458,7 +466,7 @@ static char *my_strdup(const char *s, size_t max_length) {
   /* trim line ending and append '\0' */
   d = (char *)TINYOBJ_MALLOC(len + 1); /* + '\0' */
   memcpy(d, s, (size_t)(len));
-  d[len+1] = '\0';
+  d[len] = '\0';
 
   return d;
 }
@@ -481,6 +489,31 @@ static char *my_strndup(const char *s, size_t len) {
   }
 
   return d;
+}
+
+char *dynamic_fgets(char **buf, size_t *size, FILE *file) {
+  char *offset;
+  char *ret;
+  size_t old_size;
+
+  if (!(ret = fgets(*buf, (int)*size, file))) {
+    return ret;
+  }
+
+  if (NULL != strchr(*buf, '\n')) {
+    return ret;
+  }
+
+  do {
+    old_size = *size;
+    *size *= 2;
+    *buf = (char*)TINYOBJ_REALLOC(*buf, *size);
+    offset = &((*buf)[old_size - 1]);
+
+    ret = fgets(offset, (int)(old_size + 1), file);
+  } while(ret && (NULL == strchr(*buf, '\n')));
+
+  return ret;
 }
 
 static void initMaterial(tinyobj_material_t *material) {
@@ -691,7 +724,8 @@ static int tinyobj_parse_and_index_mtl_file(tinyobj_material_t **materials_out,
                                             const char *filename,
                                             hash_table_t* material_table) {
   tinyobj_material_t material;
-  char linebuf[8192]; /* TODO(syoyo): alloc enough size */
+  size_t buffer_size = 128;
+  char *linebuf;
   FILE *fp;
   size_t num_materials = 0;
   tinyobj_material_t *materials = NULL;
@@ -718,8 +752,8 @@ static int tinyobj_parse_and_index_mtl_file(tinyobj_material_t **materials_out,
   /* Create a default material */
   initMaterial(&material);
 
-  /* TODO(syoyo) Support line larger than 8191 */
-  while (NULL != fgets(linebuf, 8192 - 1, fp)) {
+  linebuf = (char*)TINYOBJ_MALLOC(buffer_size);
+  while (NULL != dynamic_fgets(&linebuf, &buffer_size, fp)) {
     const char *token = linebuf;
 
     line_end = token + strlen(token);
@@ -919,6 +953,10 @@ static int tinyobj_parse_and_index_mtl_file(tinyobj_material_t **materials_out,
 
   (*num_materials_out) = num_materials;
   (*materials_out) = materials;
+
+  if (linebuf) {
+    TINYOBJ_FREE(linebuf);
+  }
 
   return TINYOBJ_SUCCESS;
 }
