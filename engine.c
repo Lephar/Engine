@@ -10,6 +10,7 @@
 #include <blis/blis.h>
 #include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
+//#include "libraries/device_support.h"
 
 #define PI 3.14159265358979f
 #define varname(variable) (#variable)
@@ -44,6 +45,7 @@ xcb_connection_t *xconn;
 xcb_window_t window;
 xcb_generic_event_t *event;
 xcb_atom_t destroyEvent;
+struct timespec timespec;
 
 VkInstance instance;
 VkDebugUtilsMessengerEXT messenger;
@@ -164,9 +166,9 @@ void createWindow()
 	 32, 1, &reply->atom);
 	destroyEvent = reply->atom;
 
-	const char *title = "Vulkan";
-	xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING,
-	 8, strlen(title), title);
+	//const char *title = "Vulkan";
+	//xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING,
+	// 8, strlen(title), title);
 
 	xcb_map_window(xconn, window);
 	xcb_flush(xconn);
@@ -368,6 +370,8 @@ void createSwapchain()
 	 (swapchainDetails.capabilities.minImageCount < swapchainDetails.capabilities.maxImageCount);
 	swapchainFormat = surfaceFormat.format;
 	swapchainExtent = swapchainDetails.capabilities.currentExtent;
+	width = swapchainExtent.width;
+	height = swapchainExtent.height;
 
 	VkSwapchainCreateInfoKHR swapchainInfo = {0};
 	swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -759,10 +763,10 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 void createVertexBuffer()
 {
 	Vertex buffer[] = {
-		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}}
+		{{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}},
+		{{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
+		{{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}}
 	};
 
 	vertices = buffer;
@@ -1160,13 +1164,21 @@ void perspective(float m[], float fov, float asp, float n, float f)
 void updateUniformBuffer(int index)
 {
 	static float theta = 0.0f;
+	static long checkPoint = 0L;
 	UniformBufferObject ubo = {0};
 
-	theta += 0.01f;
+	long timediff = (timespec.tv_nsec - checkPoint);
+	checkPoint = timespec.tv_nsec;
+	if(timediff < 0)
+		timediff += 1e9L;
+	theta += PI * timediff / 4e9L;
+
 	identity(ubo.model);
 	rotate(ubo.model, (float[]){0, 0, 1}, theta);
-	camera(ubo.view, (float[]){0.0f, 0.0f, -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
-	perspective(ubo.proj, PI / 2, swapchainExtent.width / (float)swapchainExtent.height, 0.0f, 2.0f);
+	camera(ubo.view, (float[]){sinf(theta), cosf(theta), -1.0f},
+	 (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
+	perspective(ubo.proj, sinf(theta / 2) * PI / 8 + PI / 2,
+	 (float)width / (float)height, 0.0f, 2.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
@@ -1176,7 +1188,8 @@ void updateUniformBuffer(int index)
 
 void draw()
 {
-	uint32_t currentFrame = 0, frameCount = 0;
+	time_t currentTime = 0;
+	uint32_t currentFrame = 0, frameCount = 0, checkPoint = 0;
 
 	while(windowEvent() != destroyEvent)
 	{
@@ -1191,6 +1204,7 @@ void draw()
 			continue;
 		}
 
+		clock_gettime(CLOCK_REALTIME, &timespec);
 		updateUniformBuffer(imageIndex);
 
 		VkSemaphore waitSemaphores[] = {imageAvailable[currentFrame]};
@@ -1223,6 +1237,16 @@ void draw()
 			recreateSwapchain();
 
 		currentFrame = ++frameCount % framebufferLimit;
+		if(currentTime != timespec.tv_sec)
+		{
+			char title[18] = {0};
+			sprintf(title, "%dx%d:%d", width, height, frameCount - checkPoint);
+			xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window,
+			 XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(title), title);
+		 	xcb_flush(xconn);
+			checkPoint = frameCount;
+			currentTime = timespec.tv_sec;
+		}
 	}
 
 	vkDeviceWaitIdle(device);
