@@ -18,6 +18,7 @@ struct vertex
 {
 	float pos[3];
 	float col[3];
+	float tex[2];
 };
 
 struct uniformBufferObject
@@ -497,10 +498,16 @@ void createDescriptorSetLayout()
 	uniformBufferBinding.descriptorCount = 1;
 	uniformBufferBinding.binding = 0;
 
+	VkDescriptorSetLayoutBinding samplerLayoutBinding = {0};
+	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	samplerLayoutBinding.descriptorCount = 1;
+	samplerLayoutBinding.binding = 1;
+
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {0};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = &uniformBufferBinding;
+	layoutInfo.bindingCount = 2;
+	layoutInfo.pBindings = (VkDescriptorSetLayoutBinding[]){uniformBufferBinding, samplerLayoutBinding};
 
 	printlog(vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) == VK_SUCCESS,
 	 __FUNCTION__, "Created Descriptor Set Layout: Binding Count = %d\n", layoutInfo.bindingCount);
@@ -543,8 +550,8 @@ VkVertexInputAttributeDescription generatePositionInputAttributes()
 {
 	VkVertexInputAttributeDescription inputAttribute = {0};
 	inputAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-	inputAttribute.location = 0;
 	inputAttribute.binding = 0;
+	inputAttribute.location = 0;
 	inputAttribute.offset = 0;
 	return inputAttribute;
 }
@@ -553,9 +560,19 @@ VkVertexInputAttributeDescription generateColorInputAttributes()
 {
 	VkVertexInputAttributeDescription inputAttribute = {0};
 	inputAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-	inputAttribute.location = 1;
 	inputAttribute.binding = 0;
+	inputAttribute.location = 1;
 	inputAttribute.offset = sizeof(float) * 3;
+	return inputAttribute;
+}
+
+VkVertexInputAttributeDescription generateTextureInputAttributes()
+{
+	VkVertexInputAttributeDescription inputAttribute = {0};
+	inputAttribute.format = VK_FORMAT_R32G32_SFLOAT;
+	inputAttribute.binding = 0;
+	inputAttribute.location = 2;
+	inputAttribute.offset = sizeof(float) * 6;
 	return inputAttribute;
 }
 
@@ -579,10 +596,10 @@ void createGraphicsPipeline()
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {0};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.vertexAttributeDescriptionCount = 2;
+	vertexInputInfo.vertexAttributeDescriptionCount = 3;
 	vertexInputInfo.pVertexBindingDescriptions = &inputBinding;
 	vertexInputInfo.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription[])
-	 {generatePositionInputAttributes(), generateColorInputAttributes()};
+	 {generatePositionInputAttributes(), generateColorInputAttributes(), generateTextureInputAttributes()};
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {0};
 	inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -886,7 +903,7 @@ void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t imageWidth, uint
 void createTextureImage()
 {
 	int textureWidth, textureHeight, textureChannels;
-	stbi_uc *pixels = stbi_load("textures/texture.jpg",
+	stbi_uc *pixels = stbi_load("textures/berries.jpg",
 	 &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
 	printlog(pixels != NULL, __FUNCTION__, NULL);
 
@@ -945,10 +962,10 @@ void createTextureSampler()
 void createVertexBuffer()
 {
 	Vertex buffer[] = {
-		{{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}},
-		{{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
-		{{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}}
+		{{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+		{{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+		{{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+		{{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 	};
 
 	vertices = buffer;
@@ -1016,15 +1033,19 @@ void createUniformBuffers()
 
 void createDescriptorPool()
 {
-	VkDescriptorPoolSize poolSize = {0};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = framebufferSize;
+	VkDescriptorPoolSize uniformBufferSize = {0};
+	uniformBufferSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uniformBufferSize.descriptorCount = framebufferSize;
+
+	VkDescriptorPoolSize imageSamplerSize = {0};
+	imageSamplerSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	imageSamplerSize.descriptorCount = framebufferSize;
 
 	VkDescriptorPoolCreateInfo poolInfo = {0};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
 	poolInfo.maxSets = framebufferSize;
+	poolInfo.poolSizeCount = 2;
+	poolInfo.pPoolSizes = (VkDescriptorPoolSize[]){uniformBufferSize, imageSamplerSize};
 
 	printlog(vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) == VK_SUCCESS,
 	 __FUNCTION__, "Created Descriptor Pool\n");
@@ -1053,16 +1074,31 @@ void createDescriptorSets()
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(UniformBufferObject);
 
-		VkWriteDescriptorSet descriptorWrite = {};
-		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrite.dstSet = descriptorSets[layoutIndex];
-		descriptorWrite.dstBinding = 0;
-		descriptorWrite.dstArrayElement = 0;
-		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrite.descriptorCount = 1;
-		descriptorWrite.pBufferInfo = &bufferInfo;
+		VkDescriptorImageInfo imageInfo = {0};
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageInfo.imageView = textureImageView;
+		imageInfo.sampler = textureSampler;
 
-		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, NULL);
+		VkWriteDescriptorSet bufferDescriptorWrite = {0};
+		bufferDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		bufferDescriptorWrite.dstSet = descriptorSets[layoutIndex];
+		bufferDescriptorWrite.dstBinding = 0;
+		bufferDescriptorWrite.dstArrayElement = 0;
+		bufferDescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bufferDescriptorWrite.descriptorCount = 1;
+		bufferDescriptorWrite.pBufferInfo = &bufferInfo;
+
+		VkWriteDescriptorSet samplerDescriptorWrite = {0};
+		samplerDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		samplerDescriptorWrite.dstSet = descriptorSets[layoutIndex];
+		samplerDescriptorWrite.dstBinding = 1;
+		samplerDescriptorWrite.dstArrayElement = 0;
+		samplerDescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerDescriptorWrite.descriptorCount = 1;
+		samplerDescriptorWrite.pImageInfo = &imageInfo;
+
+		VkWriteDescriptorSet descriptorWrites[] = {bufferDescriptorWrite, samplerDescriptorWrite};
+		vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, NULL);
 	}
 
 	printlog(1, NULL, "Updated Descriptor Sets\n");
@@ -1366,7 +1402,7 @@ void updateUniformBuffer(int index)
 	rotate(ubo.model, (float[]){0, 0, 1}, theta);
 	camera(ubo.view, (float[]){sinf(theta), cosf(theta), -1.0f},
 	 (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
-	perspective(ubo.proj, sinf(theta / 2) * PI / 8 + PI / 2,
+	perspective(ubo.proj, cosf(theta / 2) * PI / 4 + PI / 2,
 	 (float)width / (float)height, 0.0f, 2.0f);
 
 	void *data;
