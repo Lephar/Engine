@@ -75,6 +75,8 @@ VkDeviceMemory *uniformBufferMemories;
 VkCommandPool commandPool;
 VkCommandBuffer *commandBuffers;
 VkImage textureImage;
+VkImageView textureImageView;
+VkSampler textureSampler;
 VkDeviceMemory textureImageMemory;
 VkDescriptorPool descriptorPool;
 VkDescriptorSet *descriptorSets;
@@ -245,7 +247,8 @@ void pickPhysicalDevice()
 				break;
 		free(extensionProperties);
 
-		if(formatCount && modeCount && swapchainSupport && deviceFeatures.geometryShader)
+		if(formatCount && modeCount && swapchainSupport &&
+		 deviceFeatures.geometryShader && deviceFeatures.samplerAnisotropy)
 		{
 			int32_t deviceScore = extensionCount + (formatCount + modeCount) * 16;
 			if(deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -307,6 +310,7 @@ void createLogicalDevice()
 	}
 
 	VkPhysicalDeviceFeatures deviceFeatures = {0};
+	deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
@@ -372,6 +376,28 @@ VkPresentModeKHR choosePresentationMode(VkPresentModeKHR *presentModes, uint32_t
 		return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+VkImageView createImageView(VkImage image, VkFormat format)
+{
+	VkImageViewCreateInfo viewInfo = {0};
+	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.image = image;
+	viewInfo.format = format;
+	viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	viewInfo.subresourceRange.levelCount = 1;
+	viewInfo.subresourceRange.baseMipLevel = 0;
+	viewInfo.subresourceRange.layerCount = 1;
+	viewInfo.subresourceRange.baseArrayLayer = 0;
+
+	VkImageView imageView;
+	printlog(vkCreateImageView(device, &viewInfo, NULL, &imageView) == VK_SUCCESS, __FUNCTION__, NULL);
+	return imageView;
+}
+
 void createSwapchain()
 {
 	VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(
@@ -413,36 +439,12 @@ void createSwapchain()
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, NULL);
 	swapchainImages = malloc(framebufferSize * sizeof(VkImage));
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, swapchainImages);
-	printlog(framebufferSize && swapchainImages, __FUNCTION__,
-	 "Acquired Swapchain Images: Count = %u\n", framebufferSize);
-}
+	printlog(framebufferSize && swapchainImages, __FUNCTION__, "Acquired Swapchain Images\n");
 
-void createImageViews()
-{
 	swapchainViews = malloc(framebufferSize * sizeof(VkImageView));
-
 	for(uint32_t viewIndex = 0; viewIndex < framebufferSize; viewIndex++)
-	{
-		VkImageViewCreateInfo viewInfo = {0};
-		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfo.image = swapchainImages[viewIndex];
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = swapchainFormat;
-		viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		viewInfo.subresourceRange.levelCount = 1;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.layerCount = 1;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-
-		printlog(vkCreateImageView(device, &viewInfo, NULL, &swapchainViews[viewIndex]) == VK_SUCCESS,
-		 __FUNCTION__, NULL);
-	}
-
-	printlog(1, NULL, "Created Image Views: Count = %u\n", framebufferSize);
+		swapchainViews[viewIndex] = createImageView(swapchainImages[viewIndex], swapchainFormat);
+	printlog(1, NULL, "Created Image Views\n");
 }
 
 void createRenderPass()
@@ -912,6 +914,32 @@ void createTextureImage()
 
 	vkDestroyBuffer(device, stagingBuffer, NULL);
 	vkFreeMemory(device, stagingBufferMemory, NULL);
+
+	textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM);
+}
+
+void createTextureSampler()
+{
+	VkSamplerCreateInfo samplerInfo = {0};
+	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerInfo.magFilter = VK_FILTER_LINEAR;
+	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	samplerInfo.unnormalizedCoordinates = VK_FALSE;
+	samplerInfo.compareEnable = VK_FALSE;
+	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+	samplerInfo.anisotropyEnable = VK_TRUE;
+	samplerInfo.maxAnisotropy = 16;
+	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	samplerInfo.mipLodBias = 0.0f;
+	samplerInfo.minLod = 0.0f;
+	samplerInfo.maxLod = 0.0f;
+
+	printlog(vkCreateSampler(device, &samplerInfo, NULL, &textureSampler) == VK_SUCCESS,
+	 __FUNCTION__, "Created Texture Sampler\n");
 }
 
 void createVertexBuffer()
@@ -973,6 +1001,19 @@ void createIndexBuffer()
 	vkDestroyBuffer(device, stagingBuffer, NULL);
 }
 
+void createUniformBuffers()
+{
+	uniformBuffers = malloc(framebufferSize * sizeof(VkBuffer));
+	uniformBufferMemories = malloc(framebufferSize * sizeof(VkDeviceMemory));
+
+	for(size_t uniformIndex = 0; uniformIndex < framebufferSize; uniformIndex++)
+		createBuffer(sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		 &uniformBuffers[uniformIndex], &uniformBufferMemories[uniformIndex]);
+
+	printlog(1, NULL, "Created Uniform Buffers\n");
+}
+
 void createDescriptorPool()
 {
 	VkDescriptorPoolSize poolSize = {0};
@@ -986,7 +1027,7 @@ void createDescriptorPool()
 	poolInfo.maxSets = framebufferSize;
 
 	printlog(vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) == VK_SUCCESS,
-	 __FUNCTION__, "Created Descriptor Pool: Size = %u\n", framebufferSize);
+	 __FUNCTION__, "Created Descriptor Pool\n");
 }
 
 void createDescriptorSets()
@@ -1003,7 +1044,7 @@ void createDescriptorSets()
 
 	descriptorSets = malloc(framebufferSize * sizeof(VkDescriptorSet));
 	printlog(vkAllocateDescriptorSets(device, &descriptorSetInfo, descriptorSets) == VK_SUCCESS,
-	 __FUNCTION__, "Allocated Descriptor Sets: Size = %u\n", framebufferSize);
+	 __FUNCTION__, "Allocated Descriptor Sets\n");
 
 	for(uint32_t layoutIndex = 0; layoutIndex < framebufferSize; layoutIndex++)
 	{
@@ -1024,19 +1065,7 @@ void createDescriptorSets()
 		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, NULL);
 	}
 
-	printlog(1, NULL, "Updated Descriptor Sets: Count = %u\n", framebufferSize);
-}
-
-void createUniformBuffers()
-{
-	uniformBuffers = malloc(framebufferSize * sizeof(VkBuffer));
-	uniformBufferMemories = malloc(framebufferSize * sizeof(VkDeviceMemory));
-
-	for(size_t uniformIndex = 0; uniformIndex < framebufferSize; uniformIndex++)
-		createBuffer(sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-		 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		 &uniformBuffers[uniformIndex], &uniformBufferMemories[uniformIndex]);
-	printlog(1, NULL, "Created Uniform Buffers: Count = %d\n", framebufferSize);
+	printlog(1, NULL, "Updated Descriptor Sets\n");
 }
 
 void createCommandBuffers()
@@ -1049,7 +1078,7 @@ void createCommandBuffers()
 
 	commandBuffers = malloc(framebufferSize * sizeof(VkCommandBuffer));
 	printlog(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers) == VK_SUCCESS,
-	 __FUNCTION__, "Allocated Command Buffers: Size = %u\n", framebufferSize);
+	 __FUNCTION__, "Allocated Command Buffers\n");
 
 	for(uint32_t commandIndex = 0; commandIndex < framebufferSize; commandIndex++)
 	{
@@ -1081,7 +1110,7 @@ void createCommandBuffers()
 		printlog(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS, __FUNCTION__, NULL);
 	}
 
-	printlog(1, NULL, "Recorded Commands: Count = %u\n", framebufferSize);
+	printlog(1, NULL, "Recorded Commands\n");
 }
 
 void createSyncObjects()
@@ -1105,7 +1134,7 @@ void createSyncObjects()
 		vkCreateFence(device, &fenceInfo, NULL, &frameFences[syncIndex]);
 	}
 
-	printlog(1, NULL, "Created Syncronization Objects: Count = %u\n", framebufferLimit);
+	printlog(1, NULL, "Created Syncronization Objects\n");
 }
 
 void recreateSwapchain()
@@ -1116,7 +1145,6 @@ void recreateSwapchain()
 	 generateSwapchainDetails(physicalDevice);
 
 	createSwapchain();
-	createImageViews();
 	createRenderPass();
 	createGraphicsPipeline();
 	createFramebuffers();
@@ -1132,13 +1160,13 @@ void setup()
 	pickPhysicalDevice();
 	createLogicalDevice();
 	createSwapchain();
-	createImageViews();
 	createRenderPass();
 	createDescriptorSetLayout();
 	createGraphicsPipeline();
 	createFramebuffers();
 	createCommandPool();
 	createTextureImage();
+	createTextureSampler();
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
@@ -1448,6 +1476,8 @@ void clean()
 	vkFreeMemory(device, indexBufferMemory, NULL);
 	vkDestroyBuffer(device, vertexBuffer, NULL);
 	vkFreeMemory(device, vertexBufferMemory, NULL);
+	vkDestroySampler(device, textureSampler, NULL);
+	vkDestroyImageView(device, textureImageView, NULL);
 	vkDestroyImage(device, textureImage, NULL);
 	vkFreeMemory(device, textureImageMemory, NULL);
 	for(uint32_t framebufferIndex = 0; framebufferIndex < framebufferSize; framebufferIndex++)
