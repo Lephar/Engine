@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <limits.h>
 #include <xcb/xcb.h>
@@ -85,6 +86,23 @@ void clean();
 void recreateSwapchain();
 void cleanupSwapchain();
 
+void printlog(int success, const char *caller, char *format, ...)
+{
+	if(success)
+	{
+		va_list ap;
+		va_start(ap, format);
+		vprintf(format, ap);
+		va_end(ap);
+	}
+
+	else
+	{
+		printf("Failed at %s()\n", caller);
+		exit(1);
+	}
+}
+
 void createInstance()
 {
 	VkApplicationInfo appInfo = {0};
@@ -109,8 +127,8 @@ void createInstance()
 	instanceInfo.enabledExtensionCount = extensionCount;
 	instanceInfo.ppEnabledExtensionNames = extensionNames;
 
-	if(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS)
-		printf("Created Instance: LunarG\n");
+	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS,
+	 __FUNCTION__, "Created Instance: LunarG\n");
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
@@ -121,7 +139,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 	(void)severity;
 	(void)pUserData;
 
-	printf("%s\n", pCallbackData->pMessage);
+	printlog(1, NULL, "%s\n", pCallbackData->pMessage);
 	return VK_FALSE;
 }
 
@@ -141,8 +159,8 @@ void registerMessenger()
 
 	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
 	 (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-	if(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS)
-		printf("Registered Messenger: Validation Layers\n");
+	printlog(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS,
+	 __FUNCTION__, "Registered Messenger: Validation Layers\n");
 }
 
 void createWindow()
@@ -172,7 +190,7 @@ void createWindow()
 
 	xcb_map_window(xconn, window);
 	xcb_flush(xconn);
-	printf("Created Window: Xorg XCB\n");
+	printlog(1, NULL, "Created Window: Xorg XCB\n");
 }
 
 void createSurface()
@@ -182,8 +200,8 @@ void createSurface()
 	surfaceInfo.connection = xconn;
 	surfaceInfo.window = window;
 
-	if(vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS)
-		printf("Created Surface: XCB Surface\n");
+	printlog(vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS,
+	 __FUNCTION__, "Created Surface: XCB Surface\n");
 }
 
 SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
@@ -246,13 +264,9 @@ void pickPhysicalDevice()
 		}
 	}
 
-	if(maxScore != -1)
-	{
-		physicalDevice = devices[bestIndex];
-		swapchainDetails = generateSwapchainDetails(physicalDevice);
-		printf("Picked Physical Device: %s\n", deviceName);
-	}
-
+	printlog(maxScore != -1, __FUNCTION__, "Picked Physical Device: %s\n", deviceName);
+	physicalDevice = devices[bestIndex];
+	swapchainDetails = generateSwapchainDetails(physicalDevice);
 	free(deviceName);
 	free(devices);
 }
@@ -313,12 +327,10 @@ void createLogicalDevice()
 	deviceInfo.queueCreateInfoCount = queueCount;
 	deviceInfo.pQueueCreateInfos = queueList;
 
-	if(vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device) == VK_SUCCESS)
-		printf("Created Logical Device: Queue Count = %u\n", deviceInfo.queueCreateInfoCount);
+	printlog(vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device) == VK_SUCCESS, __FUNCTION__,
+	 "Created Logical Device: %s Queues\n", queueCount == 1 ? "Common" : "Specialized");
 	vkGetDeviceQueue(device, graphicsIndex, 0, &graphicsQueue);
-	printf("Acquired Graphics Queue Handle: Index = %u\n", graphicsIndex);
 	vkGetDeviceQueue(device, presentIndex, 0, &presentQueue);
-	printf("Acquired Presentation Queue Handle: Index = %u\n", presentIndex);
 	free(queueList);
 }
 
@@ -395,13 +407,13 @@ void createSwapchain()
 		swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 	}
 
-	if(vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS)
-		printf("Created Swapchain: %s\n", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "FIFO");
+	printlog(vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS, __FUNCTION__,
+	 "Created Swapchain: %s\n", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "FIFO");
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, NULL);
 	swapchainImages = malloc(framebufferSize * sizeof(VkImage));
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, swapchainImages);
-	if(framebufferSize && swapchainImages)
-		printf("Acquired Swapchain Images: Count = %u\n", framebufferSize);
+	printlog(framebufferSize && swapchainImages, __FUNCTION__,
+	 "Acquired Swapchain Images: Count = %u\n", framebufferSize);
 }
 
 void createImageViews()
@@ -423,8 +435,8 @@ void createImageViews()
 		viewInfo.subresourceRange.baseMipLevel = 0;
 		viewInfo.subresourceRange.layerCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
-		if(vkCreateImageView(device, &viewInfo, NULL, &swapchainViews[viewIndex]) == VK_SUCCESS)
-			printf("Acquired Image View: Number = %u\n", viewIndex);
+		printlog(vkCreateImageView(device, &viewInfo, NULL, &swapchainViews[viewIndex]) == VK_SUCCESS,
+		 __FUNCTION__, "Acquired Image View: Number = %u\n", viewIndex);
 	}
 }
 
@@ -466,8 +478,8 @@ void createRenderPass()
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	if(vkCreateRenderPass(device, &renderPassInfo, NULL, &renderPass) == VK_SUCCESS)
-		printf("Created Render Pass: Subpass Count = %u\n", renderPassInfo.subpassCount);
+	printlog(vkCreateRenderPass(device, &renderPassInfo, NULL, &renderPass) == VK_SUCCESS,
+	 __FUNCTION__, "Created Render Pass: Subpass Count = %u\n", renderPassInfo.subpassCount);
 }
 
 void createDescriptorSetLayout()
@@ -483,8 +495,8 @@ void createDescriptorSetLayout()
 	layoutInfo.bindingCount = 1;
 	layoutInfo.pBindings = &uniformBufferBinding;
 
-	if(vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) == VK_SUCCESS)
-		printf("Created Descriptor Set Layout: Binding Count = %d\n", layoutInfo.bindingCount);
+	printlog(vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) == VK_SUCCESS,
+	 __FUNCTION__, "Created Descriptor Set Layout: Binding Count = %d\n", layoutInfo.bindingCount);
 }
 
 VkShaderModule initializeShaderModule(const char *shaderName, const char *filePath)
@@ -495,8 +507,8 @@ VkShaderModule initializeShaderModule(const char *shaderName, const char *filePa
 	rewind(file);
 
 	uint32_t *shaderData = calloc(size, 1);
-	if(fread(shaderData, 1, size, file) == size)
-		printf("Read %s Shader File: %zd bytes\n", shaderName, size);
+	printlog(fread(shaderData, 1, size, file) == size, __FUNCTION__,
+	 "Read %s Shader File: %zd bytes\n", shaderName, size);
 	fclose(file);
 
 	VkShaderModuleCreateInfo shaderInfo = {0};
@@ -505,27 +517,28 @@ VkShaderModule initializeShaderModule(const char *shaderName, const char *filePa
 	shaderInfo.pCode = shaderData;
 
 	VkShaderModule shaderModule;
-	if(vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule) == VK_SUCCESS)
-		printf("Created %s Shader Module: %zd bytes\n", shaderName, size);
+	printlog(vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule) == VK_SUCCESS,
+	 __FUNCTION__, "Created %s Shader Module: %zd bytes\n", shaderName, size);
 	free(shaderData);
+
 	return shaderModule;
 }
 
 VkVertexInputBindingDescription generateVertexInputBinding()
 {
 	VkVertexInputBindingDescription inputBinding = {0};
+	inputBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	inputBinding.binding = 0;
 	inputBinding.stride = sizeof(Vertex);
-	inputBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	return inputBinding;
 }
 
 VkVertexInputAttributeDescription generatePositionInputAttributes()
 {
 	VkVertexInputAttributeDescription inputAttribute = {0};
-	inputAttribute.binding = 0;
-	inputAttribute.location = 0;
 	inputAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
+	inputAttribute.location = 0;
+	inputAttribute.binding = 0;
 	inputAttribute.offset = 0;
 	return inputAttribute;
 }
@@ -533,9 +546,9 @@ VkVertexInputAttributeDescription generatePositionInputAttributes()
 VkVertexInputAttributeDescription generateColorInputAttributes()
 {
 	VkVertexInputAttributeDescription inputAttribute = {0};
-	inputAttribute.binding = 0;
-	inputAttribute.location = 1;
 	inputAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
+	inputAttribute.location = 1;
+	inputAttribute.binding = 0;
 	inputAttribute.offset = sizeof(float) * 3;
 	return inputAttribute;
 }
@@ -629,8 +642,8 @@ void createGraphicsPipeline()
 	pipelineLayoutInfo.setLayoutCount = 1;
 	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 
-	if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout) == VK_SUCCESS)
-		printf("Created Pipeline Layout: Set Layout Count = %d\n", pipelineLayoutInfo.setLayoutCount);
+	printlog(vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout) == VK_SUCCESS,
+	 __FUNCTION__, "Created Pipeline Layout: Set Layout Count = %d\n", pipelineLayoutInfo.setLayoutCount);
 
 	VkGraphicsPipelineCreateInfo pipelineInfo = {0};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -647,8 +660,8 @@ void createGraphicsPipeline()
 	pipelineInfo.pColorBlendState = &colorBlendInfo;
 	pipelineInfo.layout = pipelineLayout;
 
-	if(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline) == VK_SUCCESS)
-		printf("Created Graphics Pipeline: %u x %u\n", width, height);
+	printlog(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline)
+	 == VK_SUCCESS, __FUNCTION__ , "Created Graphics Pipeline: %u x %u\n", width, height);
 
 	vkDestroyShaderModule(device, fragmentShader, NULL);
 	vkDestroyShaderModule(device, vertexShader, NULL);
@@ -669,9 +682,8 @@ void createFramebuffers()
 		framebufferInfo.width = swapchainExtent.width;
 		framebufferInfo.height = swapchainExtent.height;
 
-		if(vkCreateFramebuffer(device, &framebufferInfo, NULL,
-		 &swapchainFramebuffers[framebufferIndex]) == VK_SUCCESS)
-			printf("Created Framebuffer: Number = %u\n", framebufferIndex);
+		printlog(vkCreateFramebuffer(device, &framebufferInfo, NULL, &swapchainFramebuffers[framebufferIndex])
+		 == VK_SUCCESS, __FUNCTION__, "Created Framebuffer: Number = %u\n", framebufferIndex);
 	}
 }
 
@@ -681,8 +693,8 @@ void createCommandPool()
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.queueFamilyIndex = graphicsIndex;
 
-	if(vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) == VK_SUCCESS)
-		printf("Created Command Pool: Queue Index = %u\n", graphicsIndex);
+	printlog(vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) == VK_SUCCESS,
+	 __FUNCTION__, "Created Command Pool: Queue Index = %u\n", graphicsIndex);
 }
 
 uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
@@ -691,8 +703,7 @@ uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 
 	for(uint32_t index = 0; index < memoryProperties.memoryTypeCount; index++)
-		if((filter & (1 << index)) &&
-		 (memoryProperties.memoryTypes[index].propertyFlags & flags) == flags)
+		if((filter & (1 << index)) && (memoryProperties.memoryTypes[index].propertyFlags & flags) == flags)
 			return index;
 
 	return 0;
@@ -707,8 +718,8 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	bufferInfo.usage = usage;
 	bufferInfo.size = size;
 
-	if(vkCreateBuffer(device, &bufferInfo, NULL, buffer) == VK_SUCCESS)
-		printf("Created Buffer: Size = %lu\n", bufferInfo.size);
+	printlog(vkCreateBuffer(device, &bufferInfo, NULL, buffer) == VK_SUCCESS,
+	 __FUNCTION__, "Created Buffer: Size = %lu bytes\n", bufferInfo.size);
 
 	VkMemoryRequirements memoryRequirements;
 	vkGetBufferMemoryRequirements(device, *buffer, &memoryRequirements);
@@ -718,8 +729,8 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	allocateInfo.allocationSize = memoryRequirements.size;
 	allocateInfo.memoryTypeIndex = chooseMemoryType(memoryRequirements.memoryTypeBits, properties);
 
-	if(vkAllocateMemory(device, &allocateInfo, NULL, bufferMemory) == VK_SUCCESS)
-		printf("Allocated Buffer Memory: Size = %lu\n", memoryRequirements.size);
+	printlog(vkAllocateMemory(device, &allocateInfo, NULL, bufferMemory) == VK_SUCCESS,
+	 __FUNCTION__, "Allocated Buffer Memory: Size = %lu bytes\n", memoryRequirements.size);
 	vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
 
@@ -732,8 +743,8 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 	allocateInfo.commandBufferCount = 1;
 
 	VkCommandBuffer commandBuffer;
-	if(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer) == VK_SUCCESS)
-		printf("Allocated Command Buffer: Copy Queue\n");
+	printlog(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer) == VK_SUCCESS,
+	 __FUNCTION__, "Allocated Command Buffer: Copy Queue\n");
 
 	VkCommandBufferBeginInfo beginInfo = {0};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -755,8 +766,8 @@ void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 
 	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
 	vkQueueWaitIdle(graphicsQueue);
-	printf("Successfuly Copied Buffer: Size = %lu\n", size);
 
+	printlog(1, NULL, "Successfuly Copied Buffer: Size = %lu bytes\n", size);
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
@@ -786,7 +797,7 @@ void createVertexBuffer()
 	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 	 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
 	copyBuffer(stagingBuffer, vertexBuffer, vertexCount * vertexSize);
-	printf("Copied Vertex Buffer Into Memory: Size = %lu\n", vertexCount * vertexSize);
+	printlog(1, NULL, "Copied Vertex Buffer: Size = %lu bytes\n", vertexCount * vertexSize);
 
 	vkFreeMemory(device, stagingBufferMemory, NULL);
 	vkDestroyBuffer(device, stagingBuffer, NULL);
@@ -813,7 +824,7 @@ void createIndexBuffer()
 	createBuffer(indexCount * indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 	 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
 	copyBuffer(stagingBuffer, indexBuffer, indexCount * indexSize);
-	printf("Copied Index Buffer Into Memory: Size = %lu\n", indexCount * indexSize);
+	printlog(1, NULL, "Copied Index Buffer: Size = %lu bytes\n", indexCount * indexSize);
 
 	vkFreeMemory(device, stagingBufferMemory, NULL);
 	vkDestroyBuffer(device, stagingBuffer, NULL);
@@ -831,8 +842,8 @@ void createDescriptorPool()
 	poolInfo.pPoolSizes = &poolSize;
 	poolInfo.maxSets = framebufferSize;
 
-	if(vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) == VK_SUCCESS)
-		printf("Created Descriptor Pool: Size = %u\n", framebufferSize);
+	printlog(vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) == VK_SUCCESS,
+	 __FUNCTION__, "Created Descriptor Pool: Size = %u\n", framebufferSize);
 }
 
 void createDescriptorSets()
@@ -848,8 +859,8 @@ void createDescriptorSets()
 	descriptorSetInfo.pSetLayouts = layouts;
 
 	descriptorSets = malloc(framebufferSize * sizeof(VkDescriptorSet));
-	if(vkAllocateDescriptorSets(device, &descriptorSetInfo, descriptorSets) == VK_SUCCESS)
-		printf("Allocated Descriptor Sets: Size = %u\n", framebufferSize);
+	printlog(vkAllocateDescriptorSets(device, &descriptorSetInfo, descriptorSets) == VK_SUCCESS,
+	 __FUNCTION__, "Allocated Descriptor Sets: Size = %u\n", framebufferSize);
 
 	for(uint32_t layoutIndex = 0; layoutIndex < framebufferSize; layoutIndex++)
 	{
@@ -868,7 +879,7 @@ void createDescriptorSets()
 		descriptorWrite.pBufferInfo = &bufferInfo;
 
 		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, NULL);
-		printf("Updated Descriptor Set: Index = %u\n", layoutIndex);
+		printlog(1, NULL, "Updated Descriptor Set: Index = %u\n", layoutIndex);
 	}
 }
 
@@ -881,7 +892,7 @@ void createUniformBuffers()
 		createBuffer(sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 		 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		 &uniformBuffers[uniformIndex], &uniformBufferMemories[uniformIndex]);
-	printf("Created Uniform Buffers: Count = %d\n", framebufferSize);
+	printlog(1, NULL, "Created Uniform Buffers: Count = %d\n", framebufferSize);
 }
 
 void createCommandBuffers()
@@ -893,8 +904,8 @@ void createCommandBuffers()
 	allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocateInfo.commandBufferCount = framebufferSize;
 
-	if(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers) == VK_SUCCESS)
-		printf("Allocated Command Buffers: Size = %u\n", framebufferSize);
+	printlog(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers) == VK_SUCCESS,
+	 __FUNCTION__, "Allocated Command Buffers: Size = %u\n", framebufferSize);
 
 	for(uint32_t commandIndex = 0; commandIndex < framebufferSize; commandIndex++)
 	{
@@ -902,8 +913,8 @@ void createCommandBuffers()
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-		if(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS)
-			printf("Started Command Buffer Recording: Index = %u\n", commandIndex);
+		printlog(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS,
+		 __FUNCTION__, "Started Command Buffer Recording: Index = %u\n", commandIndex);
 
 		VkRenderPassBeginInfo renderPassBeginInfo = {0};
 		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -925,8 +936,8 @@ void createCommandBuffers()
 		vkCmdDrawIndexed(commandBuffers[commandIndex], indexCount, 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(commandBuffers[commandIndex]);
-		if(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS)
-			printf("Successfuly Completed Recording: Index = %u\n", commandIndex);
+		printlog(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS,
+		 __FUNCTION__, "Successfuly Completed Recording: Index = %u\n", commandIndex);
 	}
 }
 
@@ -950,7 +961,7 @@ void createSyncObjects()
 		vkCreateFence(device, &fenceInfo, NULL, &frameFences[syncIndex]);
 	}
 
-	printf("Created Syncronization Objects: Count = %u\n", framebufferLimit);
+	printlog(1, NULL, "Created Syncronization Objects: Count = %u\n", framebufferLimit);
 }
 
 void recreateSwapchain()
@@ -1190,6 +1201,7 @@ void draw()
 {
 	time_t currentTime = 0;
 	uint32_t currentFrame = 0, frameCount = 0, checkPoint = 0;
+	printlog(1, NULL, "Started Drawing...\n");
 
 	while(windowEvent() != destroyEvent)
 	{
@@ -1218,8 +1230,7 @@ void draw()
 		submitInfo.pSignalSemaphores = signalSemaphores;
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
-		submitInfo.pWaitDstStageMask = (VkPipelineStageFlags[])
-		 {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+		submitInfo.pWaitDstStageMask = (VkPipelineStageFlags[]){VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
 		vkResetFences(device, 1, &frameFences[currentFrame]);
 		vkQueueSubmit(graphicsQueue, 1, &submitInfo, frameFences[currentFrame]);
@@ -1243,12 +1254,13 @@ void draw()
 			sprintf(title, "%dx%d:%d", width, height, frameCount - checkPoint);
 			xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window,
 			 XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(title), title);
-		 	xcb_flush(xconn);
+			xcb_flush(xconn);
 			checkPoint = frameCount;
 			currentTime = timespec.tv_sec;
 		}
 	}
 
+	printlog(1, NULL, "Drawing Ended\n");
 	vkDeviceWaitIdle(device);
 }
 
@@ -1269,6 +1281,7 @@ void cleanupSwapchain()
 
 void clean()
 {
+	printlog(1, NULL, "Started Cleaning\n");
 	for(uint32_t syncIndex = 0; syncIndex < framebufferLimit; syncIndex++)
 	{
 		vkDestroyFence(device, frameFences[syncIndex], NULL);
@@ -1305,6 +1318,7 @@ void clean()
 	if(destroyMessenger != NULL)
 		destroyMessenger(instance, messenger, NULL);
 	vkDestroyInstance(instance, NULL);
+	printlog(1, NULL, "Cleaned Up!\n");
 }
 
 int main()
