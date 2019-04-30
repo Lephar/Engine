@@ -186,10 +186,6 @@ void createWindow()
 	 XCB_ATOM_ATOM, 32, 1, &reply->atom);
 	destroyEvent = reply->atom;
 
-	//const char *title = "Vulkan";
-	//xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING,
-	// 8, strlen(title), title);
-
 	xcb_map_window(xconn, window);
 	xcb_flush(xconn);
 	printlog(1, NULL, "Created Window: Xorg XCB\n");
@@ -339,11 +335,13 @@ void createLogicalDevice()
 VkSurfaceFormatKHR chooseSurfaceFormat(VkSurfaceFormatKHR *surfaceFormats, uint32_t formatCount)
 {
 	int8_t bgr = 0, srgb = 0;
+
 	for(uint32_t formatIndex = 0; formatIndex < formatCount; formatIndex++)
 	{
 		if(surfaceFormats[formatIndex].format == VK_FORMAT_UNDEFINED ||
 		 surfaceFormats[formatIndex].format == VK_FORMAT_B8G8R8A8_UNORM)
 			bgr = 1;
+
 		if(surfaceFormats[formatIndex].format == VK_FORMAT_UNDEFINED ||
 		 surfaceFormats[formatIndex].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 			srgb = 1;
@@ -352,12 +350,14 @@ VkSurfaceFormatKHR chooseSurfaceFormat(VkSurfaceFormatKHR *surfaceFormats, uint3
 	VkSurfaceFormatKHR temporaryFormat = {0};
 	temporaryFormat.format = bgr ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormats[0].format;
 	temporaryFormat.colorSpace = srgb ? VK_COLOR_SPACE_SRGB_NONLINEAR_KHR : surfaceFormats[0].colorSpace;
+
 	return temporaryFormat;
 }
 
 VkPresentModeKHR choosePresentationMode(VkPresentModeKHR *presentModes, uint32_t modeCount)
 {
 	int8_t mailbox = 0, relaxed = 0;
+
 	for(uint32_t modeIndex = 0; modeIndex < modeCount; modeIndex++)
 	{
 		if(presentModes[modeIndex] == VK_PRESENT_MODE_MAILBOX_KHR)
@@ -402,6 +402,7 @@ void createSwapchain()
 	swapchainInfo.preTransform = swapchainDetails.capabilities.currentTransform;
 	swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
 	if(graphicsIndex != presentIndex)
 	{
 		swapchainInfo.queueFamilyIndexCount = 2;
@@ -438,6 +439,7 @@ void createImageViews()
 		viewInfo.subresourceRange.baseMipLevel = 0;
 		viewInfo.subresourceRange.layerCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
+
 		printlog(vkCreateImageView(device, &viewInfo, NULL, &swapchainViews[viewIndex]) == VK_SUCCESS,
 		 __FUNCTION__, NULL);
 	}
@@ -837,8 +839,8 @@ void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayo
 	barrier.subresourceRange.layerCount = 1;
 	(void)format;
 
-	if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-	 newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED
+	 && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 	{
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -909,6 +911,9 @@ void createTextureImage()
 	copyBufferToImage(stagingBuffer, textureImage, textureWidth, textureHeight);
 	transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_UNORM,
 	 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	vkDestroyBuffer(device, stagingBuffer, NULL);
+	vkFreeMemory(device, stagingBufferMemory, NULL);
 }
 
 void createVertexBuffer()
@@ -1067,9 +1072,9 @@ void createCommandBuffers()
 		vkCmdBeginRenderPass(commandBuffers[commandIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-		VkDeviceSize offsets[] = {0};
 		VkBuffer vertexBuffers[] = {vertexBuffer};
-		vkCmdBindVertexBuffers(commandBuffers[commandIndex], 0, 1, vertexBuffers, offsets);
+		VkDeviceSize vertexBufferCount = sizeof(vertexBuffers) / sizeof(vertexBuffers[0]), offsets[] = {0};
+		vkCmdBindVertexBuffers(commandBuffers[commandIndex], 0, vertexBufferCount, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
 		 pipelineLayout, 0, 1, &descriptorSets[commandIndex], 0, NULL);
@@ -1440,6 +1445,8 @@ void clean()
 	vkFreeMemory(device, indexBufferMemory, NULL);
 	vkDestroyBuffer(device, vertexBuffer, NULL);
 	vkFreeMemory(device, vertexBufferMemory, NULL);
+	vkDestroyImage(device, textureImage, NULL);
+	vkFreeMemory(device, textureImageMemory, NULL);
 	for(uint32_t framebufferIndex = 0; framebufferIndex < framebufferSize; framebufferIndex++)
 		vkDestroyFramebuffer(device, swapchainFramebuffers[framebufferIndex], NULL);
 	vkFreeCommandBuffers(device, commandPool, framebufferSize, commandBuffers);
