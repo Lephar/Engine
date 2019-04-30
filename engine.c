@@ -8,10 +8,8 @@
 #include <xcb/xcb.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xcb.h>
-#include <blis/blis.h>
 #include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
-//#include "libraries/device_support.h"
 
 #define PI 3.14159265358979f
 #define varname(variable) (#variable)
@@ -1043,13 +1041,13 @@ void createUniformBuffers()
 
 void createCommandBuffers()
 {
-	commandBuffers = malloc(framebufferSize * sizeof(VkCommandBuffer));
 	VkCommandBufferAllocateInfo allocateInfo = {0};
 	allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocateInfo.commandPool = commandPool;
 	allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocateInfo.commandBufferCount = framebufferSize;
 
+	commandBuffers = malloc(framebufferSize * sizeof(VkCommandBuffer));
 	printlog(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers) == VK_SUCCESS,
 	 __FUNCTION__, "Allocated Command Buffers: Size = %u\n", framebufferSize);
 
@@ -1059,8 +1057,6 @@ void createCommandBuffers()
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-		printlog(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS, __FUNCTION__, NULL);
-
 		VkRenderPassBeginInfo renderPassBeginInfo = {0};
 		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassBeginInfo.renderPass = renderPass;
@@ -1069,17 +1065,18 @@ void createCommandBuffers()
 		renderPassBeginInfo.renderArea.extent = swapchainExtent;
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &(VkClearValue){{{0.0f, 0.0f, 0.0f, 1.0f}}};
-		vkCmdBeginRenderPass(commandBuffers[commandIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
 		VkBuffer vertexBuffers[] = {vertexBuffer};
 		VkDeviceSize vertexBufferCount = sizeof(vertexBuffers) / sizeof(vertexBuffers[0]), offsets[] = {0};
-		vkCmdBindVertexBuffers(commandBuffers[commandIndex], 0, vertexBufferCount, vertexBuffers, offsets);
-		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+		printlog(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS, __FUNCTION__, NULL);
+		vkCmdBeginRenderPass(commandBuffers[commandIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 		vkCmdBindDescriptorSets(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
 		 pipelineLayout, 0, 1, &descriptorSets[commandIndex], 0, NULL);
+		vkCmdBindVertexBuffers(commandBuffers[commandIndex], 0, vertexBufferCount, vertexBuffers, offsets);
+		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdDrawIndexed(commandBuffers[commandIndex], indexCount, 1, 0, 0, 0);
-
 		vkCmdEndRenderPass(commandBuffers[commandIndex]);
 		printlog(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS, __FUNCTION__, NULL);
 	}
@@ -1090,6 +1087,7 @@ void createCommandBuffers()
 void createSyncObjects()
 {
 	framebufferLimit = 2;
+
 	imageAvailable = malloc(framebufferLimit * sizeof(VkSemaphore));
 	renderFinished = malloc(framebufferLimit * sizeof(VkSemaphore));
 	frameFences = malloc(framebufferLimit * sizeof(VkFence));
@@ -1210,6 +1208,14 @@ void cross(float a[], float b[], float c[])
 	c[2] = a[0] * b[1] - a[1] * b[0];
 }
 
+void multiply(float a[], float b[], float c[])
+{
+	for(int row = 0; row < 4; row++)
+		for(int col = 0; col < 4; col++)
+			for(int itr = 0; itr < 4; itr++)
+				c[4 * row + col] += a[4 * row + itr] * b[4 * itr + col];
+}
+
 void scale(float m[], float v[])
 {
 	float k[] = {
@@ -1217,10 +1223,9 @@ void scale(float m[], float v[])
 		0.0f, v[1], 0.0f, 0.0f,
 		0.0f, 0.0f, v[2], 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f
-	}, t[16];
+	}, t[16] = {0};
 
-	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
-	 &(float){1.0f}, k, 4, 1, m, 4, 1, &(float){0.0f}, t, 4, 1);
+	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
 }
 
@@ -1231,10 +1236,9 @@ void translate(float m[], float v[])
 		0.0f, 1.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 1.0f, 0.0f,
 		v[0], v[1], v[2], 1.0f
-	}, t[16];
+	}, t[16] = {0};
 
-	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
-	 &(float){1.0f}, k, 4, 1, m, 4, 1, &(float){0.0f}, t, 4, 1);
+ 	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
 }
 
@@ -1252,10 +1256,9 @@ void rotate(float m[], float v[], float r)
 		w * xy - s * z, w * yy + c,     w * yz + s * x, 0.0f,
 		w * xz + s * y, w * yz - s * x, w * zz + c,     0.0f,
 		0.0f,           0.0f,           0.0f,           1.0f
-	}, t[16];
+	}, t[16] = {0};
 
-	bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, 4, 4, 4,
-	 &(float){1.0f}, k, 4, 1, m, 4, 1, &(float){0.0f}, t, 4, 1);
+ 	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
 }
 
