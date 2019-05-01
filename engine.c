@@ -131,7 +131,7 @@ void createInstance()
 	instanceInfo.ppEnabledExtensionNames = extensionNames;
 
 	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS,
-	 __FUNCTION__, "Created Instance: LunarG\n");
+	 __FUNCTION__, "Created Vulkan Instance\n");
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
@@ -163,7 +163,7 @@ void registerMessenger()
 	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
 	 (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 	printlog(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS,
-	 __FUNCTION__, "Registered Messenger: Validation Layers\n");
+	 __FUNCTION__, "Registered Validation Layer Messenger\n");
 }
 
 void createWindow()
@@ -189,7 +189,7 @@ void createWindow()
 
 	xcb_map_window(xconn, window);
 	xcb_flush(xconn);
-	printlog(1, NULL, "Created Window: Xorg XCB\n");
+	printlog(1, NULL, "Created XCB Window\n");
 }
 
 void createSurface()
@@ -200,7 +200,7 @@ void createSurface()
 	surfaceInfo.window = window;
 
 	printlog(vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS,
-	 __FUNCTION__, "Created Surface: XCB Surface\n");
+	 __FUNCTION__, "Created XCB Surface\n");
 }
 
 SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
@@ -453,7 +453,7 @@ void createSwapchain()
 	}
 
 	printlog(vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS, __FUNCTION__,
-	 "Created Swapchain: %s\n", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate");
+	 "Created Swapchain: %s Mode\n", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate");
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, NULL);
 	swapchainImages = malloc(framebufferSize * sizeof(VkImage));
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, swapchainImages);
@@ -950,7 +950,7 @@ void createDepthBuffer()
 	transitionImageLayout(depthImage, depthFormat,
 	 VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-	printlog(depthFormat >= 0, __FUNCTION__, "Created Depth Buffer");
+	printlog(depthFormat >= 0, __FUNCTION__, "Created Depth Buffer\n");
 }
 
 void createFramebuffers()
@@ -1183,8 +1183,8 @@ void createDescriptorSets()
 		samplerDescriptorWrite.descriptorCount = 1;
 		samplerDescriptorWrite.pImageInfo = &imageInfo;
 
-		VkWriteDescriptorSet descriptorWrites[] = {bufferDescriptorWrite, samplerDescriptorWrite};
-		vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, NULL);
+		vkUpdateDescriptorSets(device, 2, (VkWriteDescriptorSet[])
+		 {bufferDescriptorWrite, samplerDescriptorWrite}, 0, NULL);
 	}
 
 	printlog(1, NULL, "Updated Descriptor Sets\n");
