@@ -1359,7 +1359,6 @@ inline xcb_atom_t windowEvent()
 
 void identity(float m[])
 {
-	memset(m, 0, 16);
 	m[0] = m[5] = m[10] = m[15] = 1.0f;
 }
 
@@ -1390,7 +1389,6 @@ void cross(float a[], float b[], float c[])
 
 void multiply(float a[], float b[], float c[])
 {
-	memset(c, 0, 16);
 	for(int row = 0; row < 4; row++)
 		for(int col = 0; col < 4; col++)
 			for(int itr = 0; itr < 4; itr++)
@@ -1404,7 +1402,7 @@ void scale(float m[], float v[])
 		0.0f, v[1], 0.0f, 0.0f,
 		0.0f, 0.0f, v[2], 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f
-	}, t[16];
+	}, t[16] = {0};
 
 	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
@@ -1417,7 +1415,7 @@ void translate(float m[], float v[])
 		0.0f, 1.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 1.0f, 0.0f,
 		v[0], v[1], v[2], 1.0f
-	}, t[16];
+	}, t[16] = {0};
 
  	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
@@ -1437,7 +1435,7 @@ void rotate(float m[], float v[], float r)
 		w * xy - s * z, w * yy + c,     w * yz + s * x, 0.0f,
 		w * xz + s * y, w * yz - s * x, w * zz + c,     0.0f,
 		0.0f,           0.0f,           0.0f,           1.0f
-	}, t[16];
+	}, t[16] = {0};
 
  	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
