@@ -541,7 +541,7 @@ static void initMaterial(tinyobj_material_t *material) {
 
 /* Implementation of string to int hashtable */
 
-#define HASH_TABLE_ERROR 1 
+#define HASH_TABLE_ERROR 1
 #define HASH_TABLE_SUCCESS 0
 
 #define HASH_TABLE_DEFAULT_SIZE 10
@@ -606,7 +606,7 @@ static int hash_table_insert_value(unsigned long hash, long value, hash_table_t*
   {
     if (i >= hash_table->capacity)
       return HASH_TABLE_ERROR;
-    index = (start_index + (i * i)) % hash_table->capacity; 
+    index = (start_index + (i * i)) % hash_table->capacity;
   }
 
   entry = hash_table->entries + index;
@@ -965,7 +965,7 @@ int tinyobj_parse_mtl_file(tinyobj_material_t **materials_out,
                            size_t *num_materials_out,
                            const char *filename) {
   return tinyobj_parse_and_index_mtl_file(materials_out, num_materials_out, filename, NULL);
-} 
+}
 
 
 typedef enum {
@@ -1274,7 +1274,7 @@ int tinyobj_parse_obj(tinyobj_attrib_t *attrib, tinyobj_shape_t **shapes,
     }
   }
 
-  commands = (Command *)TINYOBJ_MALLOC(sizeof(Command) * num_lines); 
+  commands = (Command *)TINYOBJ_MALLOC(sizeof(Command) * num_lines);
 
   create_hash_table(HASH_TABLE_DEFAULT_SIZE, &material_table);
 
@@ -1368,7 +1368,7 @@ int tinyobj_parse_obj(tinyobj_attrib_t *attrib, tinyobj_shape_t **shapes,
         }
         */
         if (commands[i].material_name &&
-           commands[i].material_name_len >0) 
+           commands[i].material_name_len >0)
         {
           /* Create a null terminated string */
           char* material_name_null_term = (char*) TINYOBJ_MALLOC(commands[i].material_name_len + 1);
@@ -1517,7 +1517,7 @@ int tinyobj_parse_obj(tinyobj_attrib_t *attrib, tinyobj_shape_t **shapes,
   }
 
   destroy_hash_table(&material_table);
-  
+
   (*materials_out) = materials;
   (*num_materials_out) = num_materials;
 

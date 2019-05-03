@@ -1,14 +1,21 @@
 #include <time.h>
 #include <math.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <limits.h>
+#include <unistd.h>
+#include <sys/mman.h>
 #include <xcb/xcb.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xcb.h>
+
+#define STBI_ASSERT(x)
+#define STB_IMAGE_IMPLEMENTATION
 #include "libraries/stb_image.h"
+#define TINYOBJ_LOADER_C_IMPLEMENTATION
 #include "libraries/tinyobj_loader_c.h"
 
 #define PI 3.14159265358979f
@@ -68,7 +75,7 @@ VkPipeline graphicsPipeline;
 VkFramebuffer *swapchainFramebuffers;
 VkDeviceSize vertexCount, vertexSize, indexCount, indexSize;
 Vertex *vertices;
-uint16_t *indices;
+uint32_t *indices;
 VkBuffer vertexBuffer, indexBuffer;
 VkBuffer *uniformBuffers;
 VkDeviceMemory vertexBufferMemory, indexBufferMemory;
@@ -978,7 +985,7 @@ void createFramebuffers()
 void createTextureImage()
 {
 	int textureWidth, textureHeight, textureChannels;
-	stbi_uc *pixels = stbi_load("textures/berries.jpg",
+	stbi_uc *pixels = stbi_load("textures/chalet.jpg",
 	 &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
 	printlog(pixels != NULL, __FUNCTION__, NULL);
 
@@ -1034,23 +1041,48 @@ void createTextureSampler()
 	 __FUNCTION__, "Created Texture Sampler\n");
 }
 
+void loadObjectModel()
+{
+	int file = open("models/chalet.obj", O_RDONLY);
+	size_t size = lseek(file, 0, SEEK_END);
+	lseek(file, 0, SEEK_SET);
+	void *data = mmap(NULL, size, PROT_READ, MAP_SHARED, file, 0);
+	close(file);
+
+	size_t shapeCount;
+	size_t materialCount;
+	tinyobj_attrib_t attributes;
+	tinyobj_shape_t* shapes;
+	tinyobj_material_t* materials;
+	printlog(tinyobj_parse_obj(&attributes, &shapes, &shapeCount, &materials, &materialCount, data, size,
+	 TINYOBJ_FLAG_TRIANGULATE) == TINYOBJ_SUCCESS, __FUNCTION__, "Read Object File: %lu bytes\n", size);
+	munmap(data, size);
+
+	vertexSize = sizeof(Vertex);
+	vertexCount = attributes.num_faces;
+	vertices = malloc(vertexCount * vertexSize);
+	indexSize = sizeof(uint32_t);
+	indexCount = vertexCount;
+	indices = malloc(indexCount * indexSize);
+
+	for(uint32_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+	{
+		vertices[vertexIndex].pos[0] =  attributes.vertices[3 * attributes.faces[vertexIndex].v_idx];
+		vertices[vertexIndex].pos[1] =  attributes.vertices[3 * attributes.faces[vertexIndex].v_idx + 1];
+		vertices[vertexIndex].pos[2] = -attributes.vertices[3 * attributes.faces[vertexIndex].v_idx + 2];
+		vertices[vertexIndex].tex[0] =  attributes.texcoords[2 * attributes.faces[vertexIndex].vt_idx];
+		vertices[vertexIndex].tex[1] = -attributes.texcoords[2 * attributes.faces[vertexIndex].vt_idx + 1] + 1.0f;
+		vertices[vertexIndex].col[0] = vertices[vertexIndex].col[1] = vertices[vertexIndex].col[2] = 1.0f;
+		indices[vertexIndex] = vertexIndex;
+	}
+
+	tinyobj_materials_free(materials, materialCount);
+	tinyobj_shapes_free(shapes, shapeCount);
+	tinyobj_attrib_free(&attributes);
+}
+
 void createVertexBuffer()
 {
-	Vertex buffer[] = {
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
-		{{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f}},
-		{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-		{{-0.5f, -0.5f,  0.5f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-		{{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
-		{{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f}}
-	};
-
-	vertices = buffer;
-	vertexSize = sizeof(Vertex);
-	vertexCount = sizeof(buffer) / vertexSize;
-
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
@@ -1072,19 +1104,6 @@ void createVertexBuffer()
 
 void createIndexBuffer()
 {
-	uint16_t buffer[] = {
-		0, 1, 2, 1, 3, 2,
-		4, 5, 0, 5, 1, 0,
-		5, 7, 1, 7, 3, 1,
-		7, 6, 3, 6, 2, 3,
-		6, 4, 2, 4, 0, 2,
-		6, 7, 4, 7, 5, 4
-	};
-
-	indices = buffer;
-	indexSize = sizeof(uint16_t);
-	indexCount = sizeof(buffer) / indexSize;
-
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 	createBuffer(indexCount * indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
@@ -1231,7 +1250,7 @@ void createCommandBuffers()
 		vkCmdBindDescriptorSets(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
 		 pipelineLayout, 0, 1, &descriptorSets[commandIndex], 0, NULL);
 		vkCmdBindVertexBuffers(commandBuffers[commandIndex], 0, 1, &vertexBuffer, (VkDeviceSize[]){0});
-		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(commandBuffers[commandIndex], indexCount, 1, 0, 0, 0);
 		vkCmdEndRenderPass(commandBuffers[commandIndex]);
 		printlog(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS, __FUNCTION__, NULL);
@@ -1299,6 +1318,7 @@ void setup()
 	createFramebuffers();
 	createTextureImage();
 	createTextureSampler();
+	loadObjectModel();
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
@@ -1370,6 +1390,7 @@ void cross(float a[], float b[], float c[])
 
 void multiply(float a[], float b[], float c[])
 {
+	memset(c, 0, 16);
 	for(int row = 0; row < 4; row++)
 		for(int col = 0; col < 4; col++)
 			for(int itr = 0; itr < 4; itr++)
@@ -1383,7 +1404,7 @@ void scale(float m[], float v[])
 		0.0f, v[1], 0.0f, 0.0f,
 		0.0f, 0.0f, v[2], 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f
-	}, t[16] = {0};
+	}, t[16];
 
 	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
@@ -1396,7 +1417,7 @@ void translate(float m[], float v[])
 		0.0f, 1.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 1.0f, 0.0f,
 		v[0], v[1], v[2], 1.0f
-	}, t[16] = {0};
+	}, t[16];
 
  	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
@@ -1416,7 +1437,7 @@ void rotate(float m[], float v[], float r)
 		w * xy - s * z, w * yy + c,     w * yz + s * x, 0.0f,
 		w * xz + s * y, w * yz - s * x, w * zz + c,     0.0f,
 		0.0f,           0.0f,           0.0f,           1.0f
-	}, t[16] = {0};
+	}, t[16];
 
  	multiply(k, m, t);
 	memcpy(m, t, sizeof(t));
@@ -1495,11 +1516,9 @@ void updateUniformBuffer(int index)
 	theta += PI * timediff / 4e9L;
 
 	identity(ubo.model);
-	rotate(ubo.model, (float[]){0, -1, 0}, theta);
-	camera(ubo.view, (float[]){sinf(theta) / 2, cosf(theta) / 2, -1.5f},
-	 (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, -1.0f, 0.0f});
-	perspective(ubo.proj, cosf(theta / 2) * PI / 8 + PI / 2,
-	 (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+	rotate(ubo.model, (float[]){0.0f, 0.0f, -1.0f}, theta);
+	camera(ubo.view, (float[]){0.0f, -1.5f, -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, 0.0f, -1.0f});
+	perspective(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
