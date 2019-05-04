@@ -21,11 +21,23 @@
 #define PI 3.14159265358979f
 #define varname(variable) (#variable)
 
-struct vertex
+union vertex
 {
-	float pos[3];
-	float col[3];
-	float tex[2];
+	struct
+	{
+		float pos[3];
+		float col[3];
+		float tex[2];
+	};
+
+	uint16_t data[16];
+};
+
+struct node
+{
+	int size, limit;
+	uint32_t *indices;
+	union vertex *vertices;
 };
 
 struct uniformBufferObject
@@ -43,7 +55,8 @@ struct swapchainDetails
 	VkPresentModeKHR *presentModes;
 };
 
-typedef struct vertex Vertex;
+typedef union vertex Vertex;
+typedef struct node Node;
 typedef struct uniformBufferObject UniformBufferObject;
 typedef struct swapchainDetails SwapchainDetails;
 
@@ -175,8 +188,8 @@ void registerMessenger()
 
 void createWindow()
 {
-	width = 640;
-	height = 640;
+	width = 800;
+	height = 600;
 	xconn = xcb_connect(NULL, NULL);
 	xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(xconn)).data;
 	window = xcb_generate_id(xconn);
@@ -207,7 +220,7 @@ void createSurface()
 	surfaceInfo.window = window;
 
 	printlog(vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS,
-	 __FUNCTION__, "Created XCB Surface\n");
+	 __FUNCTION__, "Created Vulkan XCB Surface\n");
 }
 
 SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
@@ -1041,6 +1054,21 @@ void createTextureSampler()
 	 __FUNCTION__, "Created Texture Sampler\n");
 }
 
+uint16_t hashVertex(Vertex vertex)
+{
+	uint16_t hash = 0;
+	for(uint16_t seed = 0; seed < 16; seed++)
+		hash ^= (vertex.data[seed] << seed) | (vertex.data[seed] >> (16 - seed));
+	return hash;
+}
+
+int compareVertex(Vertex v1, Vertex v2)
+{
+	return v1.pos[0] == v2.pos[0] && v1.pos[1] == v2.pos[1] && v1.pos[2] == v2.pos[2]
+	 && v1.col[0] == v2.col[0] && v1.col[1] == v2.col[1] && v1.col[2] == v2.col[2] &&
+	 v1.tex[0] == v2.tex[0] && v1.tex[1] == v2.tex[1];
+}
+
 void loadObjectModel()
 {
 	int file = open("models/chalet.obj", O_RDONLY);
@@ -1065,20 +1093,65 @@ void loadObjectModel()
 	indexCount = vertexCount;
 	indices = malloc(indexCount * indexSize);
 
-	for(uint32_t vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+	uint32_t uniqueCount = 0;
+	Node *map = calloc(USHRT_MAX + 1, sizeof(Node));
+
+	for(uint32_t index = 0; index < vertexCount; index++)
 	{
-		vertices[vertexIndex].pos[0] =  attributes.vertices[3 * attributes.faces[vertexIndex].v_idx];
-		vertices[vertexIndex].pos[1] =  attributes.vertices[3 * attributes.faces[vertexIndex].v_idx + 1];
-		vertices[vertexIndex].pos[2] = -attributes.vertices[3 * attributes.faces[vertexIndex].v_idx + 2];
-		vertices[vertexIndex].tex[0] =  attributes.texcoords[2 * attributes.faces[vertexIndex].vt_idx];
-		vertices[vertexIndex].tex[1] = -attributes.texcoords[2 * attributes.faces[vertexIndex].vt_idx + 1] + 1.0f;
-		vertices[vertexIndex].col[0] = vertices[vertexIndex].col[1] = vertices[vertexIndex].col[2] = 1.0f;
-		indices[vertexIndex] = vertexIndex;
+		Vertex vertex = {{{
+				 attributes.vertices[3 * attributes.faces[index].v_idx],
+				 attributes.vertices[3 * attributes.faces[index].v_idx + 1],
+				-attributes.vertices[3 * attributes.faces[index].v_idx + 2]
+			},{1.0f, 1.0f, 1.0f},{
+				 attributes.texcoords[2 * attributes.faces[index].vt_idx],
+				-attributes.texcoords[2 * attributes.faces[index].vt_idx + 1]
+		}}};
+
+		uint16_t iterator = 0, hash = hashVertex(vertex);
+
+		while(iterator < map[hash].size && !compareVertex(vertex, map[hash].vertices[iterator]))
+			iterator++;
+
+		if(iterator == map[hash].size)
+		{
+			if(!map[hash].limit)
+			{
+				map[hash].limit = 32;
+				map[hash].indices = malloc(map[hash].limit * sizeof(uint32_t));
+				map[hash].vertices = malloc(map[hash].limit * sizeof(Vertex));
+			}
+
+			else if(map[hash].size == map[hash].limit)
+			{
+				map[hash].limit *= 2;
+				map[hash].indices = realloc(map[hash].indices, map[hash].limit * sizeof(uint32_t));
+				map[hash].vertices = realloc(map[hash].vertices, map[hash].limit * sizeof(Vertex));
+			}
+
+			indices[index] = map[hash].indices[iterator] = uniqueCount;
+			vertices[uniqueCount] = map[hash].vertices[iterator] = vertex;
+			uniqueCount++;
+			map[hash].size++;
+		}
+
+		else
+			indices[index] = map[hash].indices[iterator];
 	}
+
+	vertexCount = uniqueCount;
+	vertices = realloc(vertices, vertexCount * vertexSize);
 
 	tinyobj_materials_free(materials, materialCount);
 	tinyobj_shapes_free(shapes, shapeCount);
 	tinyobj_attrib_free(&attributes);
+
+	for(uint32_t index = 0; index <= USHRT_MAX; index++)
+	{
+		free(map[index].indices);
+		free(map[index].vertices);
+	}
+
+	free(map);
 }
 
 void createVertexBuffer()
