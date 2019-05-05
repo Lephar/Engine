@@ -37,7 +37,7 @@ struct node
 {
 	int size, limit;
 	uint32_t *indices;
-	union vertex *vertices;
+	union vertex **vertices;
 };
 
 struct uniformBufferObject
@@ -1087,16 +1087,16 @@ void loadObjectModel()
 	munmap(data, size);
 
 	vertexSize = sizeof(Vertex);
-	vertexCount = attributes.num_faces;
+	vertexCount = attributes.num_faces / 4;
 	vertices = malloc(vertexCount * vertexSize);
 	indexSize = sizeof(uint32_t);
-	indexCount = vertexCount;
+	indexCount = attributes.num_faces;
 	indices = malloc(indexCount * indexSize);
 
 	uint32_t uniqueCount = 0;
 	Node *map = calloc(USHRT_MAX + 1, sizeof(Node));
 
-	for(uint32_t index = 0; index < vertexCount; index++)
+	for(uint32_t index = 0; index < indexCount; index++)
 	{
 		Vertex vertex = {{{
 				 attributes.vertices[3 * attributes.faces[index].v_idx],
@@ -1109,7 +1109,7 @@ void loadObjectModel()
 
 		uint16_t iterator = 0, hash = hashVertex(vertex);
 
-		while(iterator < map[hash].size && !compareVertex(vertex, map[hash].vertices[iterator]))
+		while(iterator < map[hash].size && !compareVertex(vertex, *map[hash].vertices[iterator]))
 			iterator++;
 
 		if(iterator == map[hash].size)
@@ -1118,18 +1118,25 @@ void loadObjectModel()
 			{
 				map[hash].limit = 32;
 				map[hash].indices = malloc(map[hash].limit * sizeof(uint32_t));
-				map[hash].vertices = malloc(map[hash].limit * sizeof(Vertex));
+				map[hash].vertices = malloc(map[hash].limit * sizeof(Vertex*));
 			}
 
 			else if(map[hash].size == map[hash].limit)
 			{
 				map[hash].limit *= 2;
 				map[hash].indices = realloc(map[hash].indices, map[hash].limit * sizeof(uint32_t));
-				map[hash].vertices = realloc(map[hash].vertices, map[hash].limit * sizeof(Vertex));
+				map[hash].vertices = realloc(map[hash].vertices, map[hash].limit * sizeof(Vertex*));
+			}
+
+			if(uniqueCount == vertexCount)
+			{
+				vertexCount *= 2;
+				vertices = realloc(vertices, vertexCount * vertexSize);
 			}
 
 			indices[index] = map[hash].indices[iterator] = uniqueCount;
-			vertices[uniqueCount] = map[hash].vertices[iterator] = vertex;
+			vertices[uniqueCount] = vertex;
+			map[hash].vertices[iterator] = &vertices[uniqueCount];
 			uniqueCount++;
 			map[hash].size++;
 		}
@@ -1145,10 +1152,13 @@ void loadObjectModel()
 	tinyobj_shapes_free(shapes, shapeCount);
 	tinyobj_attrib_free(&attributes);
 
-	for(uint32_t index = 0; index <= USHRT_MAX; index++)
+	for(uint32_t index = 0; index < USHRT_MAX + 1; index++)
 	{
-		free(map[index].indices);
-		free(map[index].vertices);
+		if(map[index].limit)
+		{
+			free(map[index].indices);
+			free(map[index].vertices);
+		}
 	}
 
 	free(map);
@@ -1401,35 +1411,6 @@ void setup()
 	createSyncObjects();
 }
 
-inline xcb_atom_t windowEvent()
-{
-	event = xcb_poll_for_event(xconn);
-
-	if(event)
-	{
-		uint8_t response = event->response_type & ~0x80;
-
-		if(response == XCB_CONFIGURE_NOTIFY)
-		{
-			xcb_configure_notify_event_t* configNotify = (xcb_configure_notify_event_t*)event;
-
-			if(configNotify->width > 0 && configNotify->height > 0 &&
-			 (configNotify->width != width || configNotify->height != height))
-			{
-				width = configNotify->width;
-				height = configNotify->height;
-			}
-		}
-
-		else if(response == XCB_CLIENT_MESSAGE)
-			return ((xcb_client_message_event_t*)event)->data.data32[0];
-
-		free(event);
-	}
-
-	return !destroyEvent;
-}
-
 void identity(float m[])
 {
 	m[0] = m[5] = m[10] = m[15] = 1.0f;
@@ -1595,6 +1576,35 @@ void updateUniformBuffer(int index)
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
 	memcpy(data, &ubo, sizeof(ubo));
 	vkUnmapMemory(device, uniformBufferMemories[index]);
+}
+
+xcb_atom_t windowEvent()
+{
+	event = xcb_poll_for_event(xconn);
+
+	if(event)
+	{
+		uint8_t response = event->response_type & ~0x80;
+
+		if(response == XCB_CONFIGURE_NOTIFY)
+		{
+			xcb_configure_notify_event_t* configNotify = (xcb_configure_notify_event_t*)event;
+
+			if(configNotify->width > 0 && configNotify->height > 0 &&
+			 (configNotify->width != width || configNotify->height != height))
+			{
+				width = configNotify->width;
+				height = configNotify->height;
+			}
+		}
+
+		else if(response == XCB_CLIENT_MESSAGE)
+			return ((xcb_client_message_event_t*)event)->data.data32[0];
+
+		free(event);
+	}
+
+	return !destroyEvent;
 }
 
 void draw()
