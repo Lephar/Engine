@@ -1571,6 +1571,7 @@ void updateUniformBuffer(int index)
 	rotate(ubo.model, (float[]){0.0f, 0.0f, -1.0f}, theta);
 	camera(ubo.view, (float[]){0.0f, -1.5f, -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, 0.0f, -1.0f});
 	perspective(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+	//orthographic(ubo.proj, 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
