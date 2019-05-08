@@ -20,7 +20,7 @@ Assuming you are on an up-to-date system, you can get the dependencies as such:
  Solus:
   sudo eopkg install system.devel libxcb vulkan-headers vulkan-validation-layers glslang
 
-And to compile and to run the engine is simple as that:
+And to compile and execute the engine, simply run:
  make
  ./engine.o
 
