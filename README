@@ -12,13 +12,13 @@ Assuming you are on an up-to-date system, you can get the dependencies as such:
   sudo pacman -S libxcb vulkan-devel
 
  Fedora / CentOS / RHEL:
-  sudo dnf install libxcb-devel vulkan-headers vulkan-validation-layers glslang
+  sudo dnf install libxcb-devel vulkan-headers vulkan-validation-layers spirv-tools
 
  Debian / Ubuntu / Elementary / Mint:
-  sudo apt-get install libx11-xcb-dev libvulkan-dev vulkan-validationlayers-dev glslang-tools
+  sudo apt-get install libx11-xcb-dev libvulkan-dev vulkan-validationlayers-dev spirv-tools
 
  Solus:
-  sudo eopkg install system.devel libxcb vulkan-headers vulkan-validation-layers glslang
+  sudo eopkg install system.devel libxcb vulkan-headers vulkan-validation-layers spirv-tools
 
 And to compile and execute the engine, simply run:
  make

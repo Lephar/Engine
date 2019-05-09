@@ -1418,7 +1418,7 @@ void identity(float m[])
 
 void normalize(float v[])
 {
-	const float eps = 0.0009765625f; //Epsilon = 2 ^ -10
+	const float eps = 0.0009765625f;
 	float mag = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 
 	if(mag > eps && fabsf(1.0f - mag) > eps)
