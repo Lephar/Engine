@@ -350,6 +350,7 @@ void createLogicalDevice()
 
 	VkPhysicalDeviceFeatures deviceFeatures = {0};
 	deviceFeatures.samplerAnisotropy = VK_TRUE;
+	deviceFeatures.sampleRateShading = VK_TRUE;
 
 	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
@@ -725,7 +726,8 @@ void createGraphicsPipeline()
 
 	VkPipelineMultisampleStateCreateInfo multisamplingInfo = {0};
 	multisamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisamplingInfo.sampleShadingEnable = VK_FALSE;
+	multisamplingInfo.sampleShadingEnable = VK_TRUE;
+	multisamplingInfo.minSampleShading = 1.0f;
 	multisamplingInfo.rasterizationSamples = msaaSamples;
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {0};
