@@ -66,8 +66,6 @@ xcb_window_t window;
 xcb_generic_event_t *event;
 xcb_atom_t destroyEvent;
 struct timespec timespec;
-int32_t mouseX, mouseY, pmouseX, pmouseY;
-float camX, camY;
 
 VkInstance instance;
 VkDebugUtilsMessengerEXT messenger;
@@ -194,24 +192,20 @@ void createWindow()
 {
 	width = 800;
 	height = 600;
-	mouseX = width / 2;
-	mouseY = height / 2;
 	xconn = xcb_connect(NULL, NULL);
 	xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(xconn)).data;
 	window = xcb_generate_id(xconn);
 
 	uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-	uint32_t valueList[] = {screen->black_pixel, XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_MOTION
-	 | XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY};
+	uint32_t values[] = {screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY};
 	xcb_create_window(xconn, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, width, height, 0,
-	 XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, valueList);
+	 XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
 
 	xcb_intern_atom_cookie_t protCookie = xcb_intern_atom(xconn, 0, 12, "WM_PROTOCOLS");
 	xcb_intern_atom_reply_t* protReply = xcb_intern_atom_reply(xconn, protCookie, 0);
 	xcb_intern_atom_cookie_t cookie = xcb_intern_atom(xconn, 0, 16, "WM_DELETE_WINDOW");
 	xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(xconn, cookie, 0);
-	xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, protReply->atom,
-	 XCB_ATOM_ATOM, 32, 1, &reply->atom);
+	xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, protReply->atom, XCB_ATOM_ATOM, 32, 1, &reply->atom);
 	destroyEvent = reply->atom;
 
 	xcb_map_window(xconn, window);
@@ -1686,7 +1680,7 @@ void updateUniformBuffer(int index)
 
 	identity(ubo.model);
 	rotate(ubo.model, (float[]){0.0f, 0.0f, -1.0f}, theta);
-	camera(ubo.view, (float[]){0.0f, -1.5f, -1.0f}, (float[]){camX, 0.0f, camY}, (float[]){0.0f, 0.0f, -1.0f});
+	camera(ubo.view, (float[]){0.0f, -1.5f, -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, 0.0f, -1.0f});
 	perspective(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
 	//orthographic(ubo.proj, 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
 
@@ -1696,7 +1690,7 @@ void updateUniformBuffer(int index)
 	vkUnmapMemory(device, uniformBufferMemories[index]);
 }
 
-xcb_atom_t windowEvent()
+int checkEvents()
 {
 	while(1)
 	{
@@ -1705,22 +1699,7 @@ xcb_atom_t windowEvent()
 
 		uint8_t response = event->response_type & ~0x80;
 
-		if(response == XCB_MOTION_NOTIFY)
-		{
-			xcb_motion_notify_event_t* motionNotify = (xcb_motion_notify_event_t*)event;
-
-			if(motionNotify->state & (XCB_BUTTON_MASK_1 | XCB_BUTTON_MASK_2 | XCB_BUTTON_MASK_3))
-			{
-				pmouseX = mouseX;
-				pmouseY = mouseY;
-				mouseX = motionNotify->event_x;
-				mouseY = motionNotify->event_y;
-				camX += (mouseX - pmouseX) / (float)width;
-				camY += (pmouseY - mouseY) / (float)height;
-			}
-		}
-
-		else if(response == XCB_CONFIGURE_NOTIFY)
+		if(response == XCB_CONFIGURE_NOTIFY)
 		{
 			xcb_configure_notify_event_t* configNotify = (xcb_configure_notify_event_t*)event;
 
@@ -1734,12 +1713,12 @@ xcb_atom_t windowEvent()
 
 		else if(response == XCB_CLIENT_MESSAGE &&
 		 ((xcb_client_message_event_t*)event)->data.data32[0] == destroyEvent)
-			return destroyEvent;
+			return 0;
 
 		free(event);
 	}
 
-	return !destroyEvent;
+	return 1;
 }
 
 void draw()
@@ -1748,7 +1727,7 @@ void draw()
 	uint32_t currentFrame = 0, frameCount = 0, checkPoint = 0;
 	printlog(1, NULL, "Started Drawing...\n");
 
-	while(windowEvent() != destroyEvent)
+	while(checkEvents())
 	{
 		vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, ULONG_MAX);
 
