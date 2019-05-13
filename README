@@ -24,4 +24,4 @@ And to compile and execute the engine, simply run:
  make
  ./engine.o
 
-Special thanks to Vulkan Tutorial's (https://vulkan-tutorial.com/) creators and contributors
+Special thanks to our beta tester (https://github.com/akpkc) and Vulkan Tutorial (https://vulkan-tutorial.com/) creators and contributors
