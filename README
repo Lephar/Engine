@@ -9,19 +9,20 @@ Dependencies are rather minimal;
 
 Assuming you are on an up-to-date system, you can get the dependencies as such:
  Arch / Manjaro / Antergos:
-  sudo pacman -S libxcb vulkan-devel
+  sudo pacman -S glfw vulkan-devel
 
  Fedora / CentOS / RHEL:
-  sudo dnf install libxcb-devel vulkan-headers vulkan-validation-layers glslang
+  sudo dnf install glfw3 vulkan-headers vulkan-validation-layers glslang
 
  Debian / Ubuntu / Elementary / Mint:
-  sudo apt-get install libx11-xcb-dev libvulkan-dev vulkan-validationlayers-dev glslang-tools
+  sudo apt-get install libglfw3-dev libvulkan-dev vulkan-validationlayers-dev glslang-tools
 
  Solus:
-  sudo eopkg install system.devel libxcb vulkan-headers vulkan-validation-layers glslang
+  sudo eopkg install system.devel glfw vulkan-headers vulkan-validation-layers glslang
 
 And to compile and execute the engine, simply run:
  make
  ./engine.o
 
-Special thanks to our beta tester (https://github.com/akpkc) and Vulkan Tutorial (https://vulkan-tutorial.com/) creators and contributors
+Special thanks to our tester (https://github.com/akpkc)
+and Vulkan Tutorial (https://vulkan-tutorial.com/) creators and contributors

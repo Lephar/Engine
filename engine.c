@@ -8,14 +8,14 @@
 #include <limits.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <xcb/xcb.h>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xcb.h>
+
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 
 #define STBI_ASSERT(x)
 #define STB_IMAGE_IMPLEMENTATION
-#include "libraries/stb_image.h"
 #define TINYOBJ_LOADER_C_IMPLEMENTATION
+#include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
 
 #define PI 3.14159265358979f
@@ -60,11 +60,8 @@ typedef struct node Node;
 typedef struct uniformBufferObject UniformBufferObject;
 typedef struct swapchainDetails SwapchainDetails;
 
-uint32_t width, height, mouseState;
-xcb_connection_t *xconn;
-xcb_window_t window;
-xcb_generic_event_t *event;
-xcb_atom_t destroyEvent;
+int width, height;
+GLFWwindow* window;
 struct timespec timespec;
 
 VkInstance instance;
@@ -138,19 +135,19 @@ void createInstance()
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_1;
 
-	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
-	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
-	const char *extensionNames[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-	 VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_EXTENSION_NAME};
-	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
+	uint32_t extensionCount;
+	const char **extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+	extensionCount++;
+	extensions = realloc(extensions, extensionCount * sizeof(char*));
+	extensions[extensionCount - 1] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 
 	VkInstanceCreateInfo instanceInfo = {0};
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pApplicationInfo = &appInfo;
-	instanceInfo.enabledLayerCount = layerCount;
-	instanceInfo.ppEnabledLayerNames = layerNames;
+	instanceInfo.enabledLayerCount = 1;
+	instanceInfo.ppEnabledLayerNames = (const char*[]){"VK_LAYER_LUNARG_standard_validation"};
 	instanceInfo.enabledExtensionCount = extensionCount;
-	instanceInfo.ppEnabledExtensionNames = extensionNames;
+	instanceInfo.ppEnabledExtensionNames = extensions;
 
 	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS,
 	 __FUNCTION__, "Created Vulkan Instance\n");
@@ -188,40 +185,14 @@ void registerMessenger()
 	 __FUNCTION__, "Registered Validation Layer Messenger\n");
 }
 
-void createWindow()
+void createSurface()
 {
 	width = 800;
 	height = 600;
-	xconn = xcb_connect(NULL, NULL);
-	xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(xconn)).data;
-	window = xcb_generate_id(xconn);
-
-	uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-	uint32_t values[] = {screen->black_pixel, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY};
-	xcb_create_window(xconn, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, width, height, 0,
-	 XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, mask, values);
-
-	xcb_intern_atom_cookie_t protCookie = xcb_intern_atom(xconn, 0, 12, "WM_PROTOCOLS");
-	xcb_intern_atom_reply_t* protReply = xcb_intern_atom_reply(xconn, protCookie, 0);
-	xcb_intern_atom_cookie_t cookie = xcb_intern_atom(xconn, 0, 16, "WM_DELETE_WINDOW");
-	xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(xconn, cookie, 0);
-	xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window, protReply->atom, XCB_ATOM_ATOM, 32, 1, &reply->atom);
-	destroyEvent = reply->atom;
-
-	xcb_map_window(xconn, window);
-	xcb_flush(xconn);
-	printlog(1, NULL, "Created XCB Window\n");
-}
-
-void createSurface()
-{
-	VkXcbSurfaceCreateInfoKHR surfaceInfo = {0};
-	surfaceInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
-	surfaceInfo.connection = xconn;
-	surfaceInfo.window = window;
-
-	printlog(vkCreateXcbSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS,
-	 __FUNCTION__, "Created Vulkan XCB Surface\n");
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  window = glfwCreateWindow(width, height, "Vulkan", NULL, NULL);
+	printlog(glfwCreateWindowSurface(instance, window, NULL, &surface) == VK_SUCCESS,
+	 __FUNCTION__, "Created GLFW Vulkan Surface\n");
 }
 
 SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
@@ -1479,8 +1450,8 @@ void recreateSwapchain()
 {
 	vkDeviceWaitIdle(device);
 	cleanupSwapchain();
-	swapchainDetails =
-	 generateSwapchainDetails(physicalDevice);
+	glfwGetFramebufferSize(window, &width, &height);
+	swapchainDetails = generateSwapchainDetails(physicalDevice);
 
 	createSwapchain();
 	createRenderPass();
@@ -1496,9 +1467,9 @@ void recreateSwapchain()
 
 void setup()
 {
+	glfwInit();
 	createInstance();
 	registerMessenger();
-	createWindow();
 	createSurface();
 	pickPhysicalDevice();
 	createLogicalDevice();
@@ -1690,45 +1661,15 @@ void updateUniformBuffer(int index)
 	vkUnmapMemory(device, uniformBufferMemories[index]);
 }
 
-int checkEvents()
-{
-	while(1)
-	{
-		if(!(event = xcb_poll_for_event(xconn)))
-			break;
-
-		uint8_t response = event->response_type & ~0x80;
-
-		if(response == XCB_CONFIGURE_NOTIFY)
-		{
-			xcb_configure_notify_event_t* configNotify = (xcb_configure_notify_event_t*)event;
-
-			if(configNotify->width > 0 && configNotify->height > 0 &&
-			 (configNotify->width != width || configNotify->height != height))
-			{
-				width = configNotify->width;
-				height = configNotify->height;
-			}
-		}
-
-		else if(response == XCB_CLIENT_MESSAGE &&
-		 ((xcb_client_message_event_t*)event)->data.data32[0] == destroyEvent)
-			return 0;
-
-		free(event);
-	}
-
-	return 1;
-}
-
 void draw()
 {
 	time_t currentTime = 0;
 	uint32_t currentFrame = 0, frameCount = 0, checkPoint = 0;
 	printlog(1, NULL, "Started Drawing...\n");
 
-	while(checkEvents())
+	while(!glfwWindowShouldClose(window))
 	{
+		glfwPollEvents();
 		vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, ULONG_MAX);
 
 		uint32_t imageIndex;
@@ -1776,9 +1717,7 @@ void draw()
 		{
 			char title[18] = {0};
 			sprintf(title, "%dx%d:%d", width, height, frameCount - checkPoint);
-			xcb_change_property(xconn, XCB_PROP_MODE_REPLACE, window,
-			 XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(title), title);
-			xcb_flush(xconn);
+			glfwSetWindowTitle(window, title);
 			checkPoint = frameCount;
 			currentTime = timespec.tv_sec;
 		}
@@ -1857,13 +1796,13 @@ void clean()
 	vkDestroySwapchainKHR(device, swapchain, NULL);
 	vkDestroyDevice(device, NULL);
 	vkDestroySurfaceKHR(instance, surface, NULL);
-	xcb_destroy_window(xconn, window);
-	xcb_disconnect(xconn);
+	glfwDestroyWindow(window);
 	PFN_vkDestroyDebugUtilsMessengerEXT destroyMessenger =
 	 (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 	if(destroyMessenger != NULL)
 		destroyMessenger(instance, messenger, NULL);
 	vkDestroyInstance(instance, NULL);
+	glfwTerminate();
 	printlog(1, NULL, "Cleaned Up!\n");
 }
 
