@@ -64,7 +64,7 @@ GLFWwindow* window;
 int width, height, state, initialized;
 double moveX, moveY, mouseX, mouseY;
 float position[4], direction[4];
-int keyW, keyA, keyS, keyD;
+int keyW, keyA, keyS, keyD, keyR, keyF;
 long timeorig;
 struct timespec timespec;
 
@@ -197,7 +197,10 @@ void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
 	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 	{
 		if(state)
+		{
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			glfwGetCursorPos(window, &mouseX, &mouseY);
+		}
 		else
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 		state = !state;
@@ -207,21 +210,30 @@ void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
 	{
 		if(key == GLFW_KEY_W && action == GLFW_PRESS)
 			keyW = 1;
-		if(key == GLFW_KEY_A && action == GLFW_PRESS)
-			keyA = 1;
 		if(key == GLFW_KEY_S && action == GLFW_PRESS)
 			keyS = 1;
+		if(key == GLFW_KEY_A && action == GLFW_PRESS)
+			keyA = 1;
 		if(key == GLFW_KEY_D && action == GLFW_PRESS)
 			keyD = 1;
-		if(key == GLFW_KEY_W && action == GLFW_RELEASE)
-			keyW = 0;
-		if(key == GLFW_KEY_A && action == GLFW_RELEASE)
-			keyA = 0;
-		if(key == GLFW_KEY_S && action == GLFW_RELEASE)
-			keyS = 0;
-		if(key == GLFW_KEY_D && action == GLFW_RELEASE)
-			keyD = 0;
+		if(key == GLFW_KEY_R && action == GLFW_PRESS)
+			keyR = 1;
+		if(key == GLFW_KEY_F && action == GLFW_PRESS)
+			keyF = 1;
 	}
+
+	if(key == GLFW_KEY_W && action == GLFW_RELEASE)
+		keyW = 0;
+	if(key == GLFW_KEY_S && action == GLFW_RELEASE)
+		keyS = 0;
+	if(key == GLFW_KEY_A && action == GLFW_RELEASE)
+		keyA = 0;
+	if(key == GLFW_KEY_D && action == GLFW_RELEASE)
+		keyD = 0;
+	if(key == GLFW_KEY_R && action == GLFW_RELEASE)
+		keyR = 0;
+	if(key == GLFW_KEY_F && action == GLFW_RELEASE)
+		keyF = 0;
 }
 
 void mouseEvent(GLFWwindow* window, double x, double y)
@@ -1779,7 +1791,7 @@ void updateUniformBuffer(int index)
 	timeorig = timespec.tv_nsec;
 	if(timediff < 0)
 		timediff += 1e9L;
-	float delta = PI * timediff / 4e9L;
+	float delta = 2 * PI * timediff / 4e9L;
 	if((keyW && keyA) || (keyW && keyD) || (keyS && keyA) || (keyS && keyD))
 		delta /= sqrtf(2);
 
@@ -1789,12 +1801,16 @@ void updateUniformBuffer(int index)
 
 	if(keyW)
 		translateVector(position, (float[]){direction[0] * delta, direction[1] * delta, direction[2] * delta});
-	if(keyA)
-		translateVector(position, (float[]){-right[0] * delta, -right[1] * delta, -right[2] * delta});
 	if(keyS)
 		translateVector(position, (float[]){-direction[0] * delta, -direction[1] * delta, -direction[2] * delta});
+	if(keyA)
+		translateVector(position, (float[]){-right[0] * delta, -right[1] * delta, -right[2] * delta});
 	if(keyD)
 		translateVector(position, (float[]){right[0] * delta, right[1] * delta, right[2] * delta});
+	if(keyR)
+		translateVector(position, (float[]){up[0] * delta, up[1] * delta, up[2] * delta});
+	if(keyF)
+		translateVector(position, (float[]){-up[0] * delta, -up[1] * delta, -up[2] * delta});
 
 	positionVector(center, position);
 	rotateVector(direction, up, PI * moveX / width);
