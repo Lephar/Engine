@@ -3,7 +3,7 @@ Game engine as Vulkan practice
 Dependencies are rather minimal;
  -Vulkan compatible GPU with up-to-date drivers
  -C17 (bug fix version of C11) compatible version of GCC
- -X11 XCB headers for window creation
+ -GLFW library for window creation
  -Vulkan headers for core renderer
  -GLSL compiler for shader compilation
 
@@ -23,6 +23,8 @@ Assuming you are on an up-to-date system, you can get the dependencies as such:
 And to compile and execute the engine, simply run:
  make
  ./engine.o
+
+Press ESC to switch between the cursor mode and the camera mode.
 
 Special thanks to our tester (https://github.com/akpkc)
 and Vulkan Tutorial (https://vulkan-tutorial.com/) creators and contributors

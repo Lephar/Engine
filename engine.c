@@ -62,6 +62,8 @@ typedef struct swapchainDetails SwapchainDetails;
 
 int width, height;
 GLFWwindow* window;
+int cursorState;
+double mouseX, mouseY, originX, originY;
 struct timespec timespec;
 
 VkInstance instance;
@@ -185,12 +187,53 @@ void registerMessenger()
 	 __FUNCTION__, "Registered Validation Layer Messenger\n");
 }
 
+void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	(void)mods;
+	(void)scancode;
+
+	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+	{
+		if(cursorState)
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		else
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		cursorState = !cursorState;
+	}
+}
+
+void mouseEvent(GLFWwindow* window, double x, double y)
+{
+	(void)window;
+
+	if(glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED)
+	{
+		mouseX = x;
+		mouseY = y;
+	}
+}
+
+void resizeEvent(GLFWwindow* window, int w, int h)
+{
+	(void)window;
+
+	width = w;
+	height = h;
+}
+
 void createSurface()
 {
 	width = 800;
 	height = 600;
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  window = glfwCreateWindow(width, height, "Vulkan", NULL, NULL);
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	window = glfwCreateWindow(width, height, "Vulkan", NULL, NULL);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwGetCursorPos(window, &originX, &originY);
+	mouseX = originX;
+	mouseY = originY;
+	glfwSetKeyCallback(window, keyEvent);
+	glfwSetCursorPosCallback(window, mouseEvent);
+	glfwSetFramebufferSizeCallback(window, resizeEvent);
 	printlog(glfwCreateWindowSurface(instance, window, NULL, &surface) == VK_SUCCESS,
 	 __FUNCTION__, "Created GLFW Vulkan Surface\n");
 }
@@ -1448,9 +1491,14 @@ void createSyncObjects()
 
 void recreateSwapchain()
 {
+	while(width == 0 || height == 0)
+	{
+		glfwWaitEvents();
+		glfwGetFramebufferSize(window, &width, &height);
+	}
 	vkDeviceWaitIdle(device);
+
 	cleanupSwapchain();
-	glfwGetFramebufferSize(window, &width, &height);
 	swapchainDetails = generateSwapchainDetails(physicalDevice);
 
 	createSwapchain();
@@ -1493,7 +1541,23 @@ void setup()
 	createSyncObjects();
 }
 
-void identity(float m[])
+void directionVector(float v[], float t[])
+{
+	v[0] = t[0];
+	v[1] = t[1];
+	v[2] = t[2];
+	v[3] = 0.0f;
+}
+
+void positionVector(float v[], float t[])
+{
+	v[0] = t[0];
+	v[1] = t[1];
+	v[2] = t[2];
+	v[3] = 1.0f;
+}
+
+void identityMatrix(float m[])
 {
 	m[0] = m[5] = m[10] = m[15] = 1.0f;
 }
@@ -1523,7 +1587,14 @@ void cross(float a[], float b[], float c[])
 	c[2] = a[0] * b[1] - a[1] * b[0];
 }
 
-void multiply(float a[], float b[], float c[])
+void multiplyVector(float a[], float b[], float c[])
+{
+	for(int row = 0; row < 4; row++)
+		for(int itr = 0; itr < 4; itr++)
+			c[row] += a[4 * row + itr] * b[itr];
+}
+
+void multiplyMatrix(float a[], float b[], float c[])
 {
 	for(int row = 0; row < 4; row++)
 		for(int col = 0; col < 4; col++)
@@ -1531,7 +1602,14 @@ void multiply(float a[], float b[], float c[])
 				c[4 * row + col] += a[4 * row + itr] * b[4 * itr + col];
 }
 
-void scale(float m[], float v[])
+void scaleVector(float v[], float t[])
+{
+	v[0] *= t[0];
+	v[1] *= t[1];
+	v[2] *= t[2];
+}
+
+void scaleMatrix(float m[], float v[])
 {
 	float k[] = {
 		v[0], 0.0f, 0.0f, 0.0f,
@@ -1540,11 +1618,18 @@ void scale(float m[], float v[])
 		0.0f, 0.0f, 0.0f, 1.0f
 	}, t[16] = {0};
 
-	multiply(k, m, t);
+	multiplyMatrix(k, m, t);
 	memcpy(m, t, sizeof(t));
 }
 
-void translate(float m[], float v[])
+void translateVector(float v[], float t[])
+{
+	v[0] += t[0] * v[3];
+	v[1] += t[1] * v[3];
+	v[2] += t[2] * v[3];
+}
+
+void translateMatrix(float m[], float v[])
 {
 	float k[] = {
 		1.0f, 0.0f, 0.0f, 0.0f,
@@ -1553,31 +1638,50 @@ void translate(float m[], float v[])
 		v[0], v[1], v[2], 1.0f
 	}, t[16] = {0};
 
- 	multiply(k, m, t);
+ 	multiplyMatrix(k, m, t);
 	memcpy(m, t, sizeof(t));
 }
 
-void rotate(float m[], float v[], float r)
+void rotate(float f[], float w[], float r, int m)
 {
-	normalize(v);
+	normalize(w);
 
-	float x = v[0], y = v[1], z = v[2];
-	float xx = x * x, xy = x * y, xz = x * z;
-	float yy = y * y, yz = y * z, zz = z * z;
-	float s = sinf(r), c = cosf(r), w = 1 - cosf(r);
+	float x = w[0], y = w[1], z = w[2], s = sinf(r), c = cosf(r), d = 1 - cosf(r);
+	float xx = x * x * d, xy = x * y * d, xz = x * z * d, yy = y * y * d, yz = y * z * d, zz = z * z * d;
 
 	float k[] = {
-		w * xx + c,     w * xy + s * z, w * xz - s * y, 0.0f,
-		w * xy - s * z, w * yy + c,     w * yz + s * x, 0.0f,
-		w * xz + s * y, w * yz - s * x, w * zz + c,     0.0f,
-		0.0f,           0.0f,           0.0f,           1.0f
-	}, t[16] = {0};
+		xx + c,     xy + s * z, xz - s * y, 0.0f,
+		xy - s * z, yy + c,     yz + s * x, 0.0f,
+		xz + s * y, yz - s * x, zz + c,     0.0f,
+		0.0f,       0.0f,       0.0f,       1.0f
+	};
 
- 	multiply(k, m, t);
-	memcpy(m, t, sizeof(t));
+	if(!m)
+	{
+		float t[4] = {0};
+		multiplyVector(k, f, t);
+		memcpy(f, t, sizeof(t));
+	}
+
+	else
+	{
+		float t[16] = {0};
+		multiplyMatrix(k, f, t);
+		memcpy(f, t, sizeof(t));
+	}
 }
 
-void camera(float m[], float eye[], float cent[], float top[])
+void rotateVector(float v[], float w[], float r)
+{
+	rotate(v, w, r, 0);
+}
+
+void rotateMatrix(float m[], float w[], float r)
+{
+	rotate(m, w, r, 1);
+}
+
+void cameraMatrix(float m[], float eye[], float cent[], float top[])
 {
 	float fwd[] = {cent[0] - eye[0], cent[1] - eye[1], cent[2] - eye[2]};
 	normalize(fwd);
@@ -1599,7 +1703,7 @@ void camera(float m[], float eye[], float cent[], float top[])
 	memcpy(m, k, sizeof(k));
 }
 
-void orthographic(float m[], float h, float r, float n, float f)
+void orthographicMatrix(float m[], float h, float r, float n, float f)
 {
 	float k[] = {
 		2 / (h * r),  0.0f,         0.0f,         0.0f,
@@ -1611,7 +1715,7 @@ void orthographic(float m[], float h, float r, float n, float f)
 	memcpy(m, k, sizeof(k));
 }
 
-void frustum(float m[], float h, float r, float n, float f)
+void frustumMatrix(float m[], float h, float r, float n, float f)
 {
 	float k[] = {
 		2 * n / (h * r),  0.0f,             0.0f,             0.0f,
@@ -1623,7 +1727,7 @@ void frustum(float m[], float h, float r, float n, float f)
 	memcpy(m, k, sizeof(k));
 }
 
-void perspective(float m[], float fov, float asp, float n, float f)
+void perspectiveMatrix(float m[], float fov, float asp, float n, float f)
 {
 	float t = tanf(fov / 2);
 
@@ -1642,6 +1746,7 @@ void updateUniformBuffer(int index)
 	static float theta = 0.0f;
 	static long checkPoint = 0L;
 	UniformBufferObject ubo = {0};
+	float eye[4], center[4], forward[4];
 
 	long timediff = (timespec.tv_nsec - checkPoint);
 	checkPoint = timespec.tv_nsec;
@@ -1649,11 +1754,19 @@ void updateUniformBuffer(int index)
 		timediff += 1e9L;
 	theta += PI * timediff / 4e9L;
 
-	identity(ubo.model);
-	rotate(ubo.model, (float[]){0.0f, 0.0f, -1.0f}, theta);
-	camera(ubo.view, (float[]){0.0f, -1.5f, -1.0f}, (float[]){0.0f, 0.0f, 0.0f}, (float[]){0.0f, 0.0f, -1.0f});
-	perspective(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
-	//orthographic(ubo.proj, 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+	positionVector(eye, (float[]){0.0f, -1.5f, -0.5f});
+	positionVector(center, eye);
+	directionVector(forward, (float[]){0.0f, 1.0f, 0.0f});
+	normalize(forward);
+	rotateVector(forward, (float[]){0.0f, 0.0f, -1.0f}, PI * (mouseX - originX) / width);
+	rotateVector(forward, (float[]){-1.0f, 0.0f, 0.0f}, PI * (mouseY - originY) / height);
+	translateVector(center, forward);
+
+	identityMatrix(ubo.model);
+	rotateMatrix(ubo.model, (float[]){0.0f, 0.0f, -1.0f}, theta);
+	cameraMatrix(ubo.view, eye, center, (float[]){0.0f, 0.0f, -1.0f});
+	perspectiveMatrix(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+	//orthographicMatrix(ubo.proj, 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
@@ -1718,8 +1831,8 @@ void draw()
 			char title[18] = {0};
 			sprintf(title, "%dx%d:%d", width, height, frameCount - checkPoint);
 			glfwSetWindowTitle(window, title);
-			checkPoint = frameCount;
 			currentTime = timespec.tv_sec;
+			checkPoint = frameCount;
 		}
 	}
 
