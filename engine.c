@@ -60,10 +60,12 @@ typedef struct node Node;
 typedef struct uniformBufferObject UniformBufferObject;
 typedef struct swapchainDetails SwapchainDetails;
 
-int width, height;
 GLFWwindow* window;
-int cursorState;
-double mouseX, mouseY, originX, originY;
+int width, height, state, initialized;
+double moveX, moveY, mouseX, mouseY;
+float position[4], direction[4];
+int keyW, keyA, keyS, keyD;
+long timeorig;
 struct timespec timespec;
 
 VkInstance instance;
@@ -194,11 +196,31 @@ void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
 
 	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 	{
-		if(cursorState)
+		if(state)
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		else
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-		cursorState = !cursorState;
+		state = !state;
+	}
+
+	if(!state)
+	{
+		if(key == GLFW_KEY_W && action == GLFW_PRESS)
+			keyW = 1;
+		if(key == GLFW_KEY_A && action == GLFW_PRESS)
+			keyA = 1;
+		if(key == GLFW_KEY_S && action == GLFW_PRESS)
+			keyS = 1;
+		if(key == GLFW_KEY_D && action == GLFW_PRESS)
+			keyD = 1;
+		if(key == GLFW_KEY_W && action == GLFW_RELEASE)
+			keyW = 0;
+		if(key == GLFW_KEY_A && action == GLFW_RELEASE)
+			keyA = 0;
+		if(key == GLFW_KEY_S && action == GLFW_RELEASE)
+			keyS = 0;
+		if(key == GLFW_KEY_D && action == GLFW_RELEASE)
+			keyD = 0;
 	}
 }
 
@@ -208,6 +230,8 @@ void mouseEvent(GLFWwindow* window, double x, double y)
 
 	if(glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED)
 	{
+		moveX = x - mouseX;
+		moveY = y - mouseY;
 		mouseX = x;
 		mouseY = y;
 	}
@@ -228,9 +252,7 @@ void createSurface()
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	window = glfwCreateWindow(width, height, "Vulkan", NULL, NULL);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	glfwGetCursorPos(window, &originX, &originY);
-	mouseX = originX;
-	mouseY = originY;
+	glfwGetCursorPos(window, &mouseX, &mouseY);
 	glfwSetKeyCallback(window, keyEvent);
 	glfwSetCursorPosCallback(window, mouseEvent);
 	glfwSetFramebufferSizeCallback(window, resizeEvent);
@@ -1743,30 +1765,48 @@ void perspectiveMatrix(float m[], float fov, float asp, float n, float f)
 
 void updateUniformBuffer(int index)
 {
-	static float theta = 0.0f;
-	static long checkPoint = 0L;
-	UniformBufferObject ubo = {0};
-	float eye[4], center[4], forward[4];
+	if(!initialized)
+	{
+		directionVector(direction, (float[]){1.0f, 0.0f, 0.0f});
+		positionVector(position, (float[]){-1.5f, 0.0f, -0.5f});
+		initialized = 1;
+	}
 
-	long timediff = (timespec.tv_nsec - checkPoint);
-	checkPoint = timespec.tv_nsec;
+	float center[4], up[4], right[4];
+	UniformBufferObject ubo = {0};
+
+	long timediff = (timespec.tv_nsec - timeorig);
+	timeorig = timespec.tv_nsec;
 	if(timediff < 0)
 		timediff += 1e9L;
-	theta += PI * timediff / 4e9L;
+	float delta = PI * timediff / 4e9L;
+	if((keyW && keyA) || (keyW && keyD) || (keyS && keyA) || (keyS && keyD))
+		delta /= sqrtf(2);
 
-	positionVector(eye, (float[]){0.0f, -1.5f, -0.5f});
-	positionVector(center, eye);
-	directionVector(forward, (float[]){0.0f, 1.0f, 0.0f});
-	normalize(forward);
-	rotateVector(forward, (float[]){0.0f, 0.0f, -1.0f}, PI * (mouseX - originX) / width);
-	rotateVector(forward, (float[]){-1.0f, 0.0f, 0.0f}, PI * (mouseY - originY) / height);
-	translateVector(center, forward);
+	directionVector(up, (float[]){0.0f, 0.0f, -1.0f});
+	cross(direction, up, right);
+	normalize(right);
+
+	if(keyW)
+		translateVector(position, (float[]){direction[0] * delta, direction[1] * delta, direction[2] * delta});
+	if(keyA)
+		translateVector(position, (float[]){-right[0] * delta, -right[1] * delta, -right[2] * delta});
+	if(keyS)
+		translateVector(position, (float[]){-direction[0] * delta, -direction[1] * delta, -direction[2] * delta});
+	if(keyD)
+		translateVector(position, (float[]){right[0] * delta, right[1] * delta, right[2] * delta});
+
+	positionVector(center, position);
+	rotateVector(direction, up, PI * moveX / width);
+	rotateVector(direction, right, PI * moveY / height);
+	translateVector(center, direction);
+
+	moveX = 0;
+	moveY = 0;
 
 	identityMatrix(ubo.model);
-	rotateMatrix(ubo.model, (float[]){0.0f, 0.0f, -1.0f}, theta);
-	cameraMatrix(ubo.view, eye, center, (float[]){0.0f, 0.0f, -1.0f});
-	perspectiveMatrix(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
-	//orthographicMatrix(ubo.proj, 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 10.0f);
+	cameraMatrix(ubo.view, position, center, (float[]){0.0f, 0.0f, -1.0f});
+	perspectiveMatrix(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.01f, 10.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
