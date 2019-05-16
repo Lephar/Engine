@@ -18,9 +18,6 @@
 #include "libraries/stb_image.h"
 #include "libraries/tinyobj_loader_c.h"
 
-#define PI 3.14159265358979f
-#define varname(variable) (#variable)
-
 union vertex
 {
 	struct
@@ -110,21 +107,23 @@ void clean();
 void recreateSwapchain();
 void cleanupSwapchain();
 
-void printlog(int success, const char *caller, char *format, ...)
+void printlog(int success, const char *format, ...)
 {
-	if(success)
+	if(format)
 	{
-		va_list ap;
-		va_start(ap, format);
-		vprintf(format, ap);
-		va_end(ap);
+		char timestamp[20];
+		clock_gettime(CLOCK_REALTIME, &timespec);
+		strftime(timestamp, 20, "%Y-%m-%d %H:%M:%S", localtime(&(time_t){timespec.tv_sec}));
+		printf("%s %7.3Lf %c: ", timestamp, timespec.tv_nsec / 1e6L, success ? 'S' : 'F');
+		va_list arguments;
+		va_start(arguments, format);
+		vprintf(format, arguments);
+		va_end(arguments);
+		printf("\n");
 	}
 
-	else
-	{
-		printf("Failed at %s()\n", caller);
+	if(!success)
 		exit(1);
-	}
 }
 
 void createInstance()
@@ -151,8 +150,7 @@ void createInstance()
 	instanceInfo.enabledExtensionCount = extensionCount;
 	instanceInfo.ppEnabledExtensionNames = extensions;
 
-	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS,
-	 __FUNCTION__, "Created Vulkan Instance\n");
+	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS, "Create Vulkan Instance");
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
@@ -163,7 +161,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 	(void)severity;
 	(void)pUserData;
 
-	printlog(1, NULL, "%s\n", pCallbackData->pMessage);
+	printlog(severity < VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT, pCallbackData->pMessage);
 	return VK_FALSE;
 }
 
@@ -184,7 +182,7 @@ void registerMessenger()
 	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
 	 (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 	printlog(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS,
-	 __FUNCTION__, "Registered Validation Layer Messenger\n");
+	 "Register Validation Layer Messenger");
 }
 
 void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -273,8 +271,7 @@ void createSurface()
 	glfwSetKeyCallback(window, keyEvent);
 	glfwSetCursorPosCallback(window, mouseEvent);
 	glfwSetFramebufferSizeCallback(window, resizeEvent);
-	printlog(glfwCreateWindowSurface(instance, window, NULL, &surface) == VK_SUCCESS,
-	 __FUNCTION__, "Created GLFW Vulkan Surface\n");
+	printlog(glfwCreateWindowSurface(instance, window, NULL, &surface) == VK_SUCCESS, "Create GLFW Vulkan Surface");
 }
 
 SwapchainDetails generateSwapchainDetails(VkPhysicalDevice temporaryDevice)
@@ -353,7 +350,7 @@ void pickPhysicalDevice()
 		}
 	}
 
-	printlog(maxScore != -1, __FUNCTION__, "Picked Physical Device: %s\n", deviceName);
+	printlog(maxScore != -1, "Pick Physical Device: %s", deviceName);
 	physicalDevice = devices[bestIndex];
 	msaaSamples = bestSample;
 	swapchainDetails = generateSwapchainDetails(physicalDevice);
@@ -419,8 +416,8 @@ void createLogicalDevice()
 	deviceInfo.queueCreateInfoCount = queueCount;
 	deviceInfo.pQueueCreateInfos = queueList;
 
-	printlog(vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device) == VK_SUCCESS, __FUNCTION__,
-	 "Created Logical Device: %s Queues\n", queueCount == 1 ? "Common" : "Specialized");
+	printlog(vkCreateDevice(physicalDevice, &deviceInfo, NULL, &device) == VK_SUCCESS,
+	 "Create Logical Device: %s Queues", queueCount == 1 ? "Common" : "Specialized");
 	vkGetDeviceQueue(device, graphicsIndex, 0, &graphicsQueue);
 	vkGetDeviceQueue(device, presentIndex, 0, &presentQueue);
 	free(queueList);
@@ -503,7 +500,7 @@ VkImageView createImageView(VkImage image, uint32_t levels, VkFormat format, VkI
 	viewInfo.subresourceRange.baseArrayLayer = 0;
 
 	VkImageView imageView;
-	printlog(vkCreateImageView(device, &viewInfo, NULL, &imageView) == VK_SUCCESS, __FUNCTION__, NULL);
+	printlog(vkCreateImageView(device, &viewInfo, NULL, &imageView) == VK_SUCCESS, NULL);
 	return imageView;
 }
 
@@ -543,18 +540,18 @@ void createSwapchain()
 		swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 	}
 
-	printlog(vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS, __FUNCTION__,
-	 "Created Swapchain: %s Mode\n", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate");
+	printlog(vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS,
+	 "Create Swapchain: %s Mode", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate");
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, NULL);
 	swapchainImages = malloc(framebufferSize * sizeof(VkImage));
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, swapchainImages);
-	printlog(framebufferSize && swapchainImages, __FUNCTION__, "Acquired Swapchain Images\n");
+	printlog(framebufferSize && swapchainImages, "Acquire Swapchain Images");
 
 	swapchainViews = malloc(framebufferSize * sizeof(VkImageView));
 	for(uint32_t viewIndex = 0; viewIndex < framebufferSize; viewIndex++)
 		swapchainViews[viewIndex] =
 		 createImageView(swapchainImages[viewIndex], 1, swapchainFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-	printlog(1, NULL, "Created Swapchain Image Views\n");
+	printlog(1, "Create Swapchain Image Views");
 }
 
 void createRenderPass()
@@ -626,7 +623,7 @@ void createRenderPass()
 	renderPassInfo.pAttachments = (VkAttachmentDescription[]){colorAttachment, depthAttachment, colorResolve};
 
 	printlog(vkCreateRenderPass(device, &renderPassInfo, NULL, &renderPass) == VK_SUCCESS,
-	 __FUNCTION__, "Created Render Pass: Subpass Count = %u\n", renderPassInfo.subpassCount);
+	 "Create Render Pass: Subpass Count = %u", renderPassInfo.subpassCount);
 }
 
 void createDescriptorSetLayout()
@@ -649,7 +646,7 @@ void createDescriptorSetLayout()
 	layoutInfo.pBindings = (VkDescriptorSetLayoutBinding[]){uniformBufferBinding, samplerLayoutBinding};
 
 	printlog(vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout) == VK_SUCCESS,
-	 __FUNCTION__, "Created Descriptor Set Layout: Binding Count = %d\n", layoutInfo.bindingCount);
+	 "Create Descriptor Set Layout: Binding Count = %d", layoutInfo.bindingCount);
 }
 
 VkShaderModule initializeShaderModule(const char *shaderName, const char *filePath)
@@ -660,7 +657,7 @@ VkShaderModule initializeShaderModule(const char *shaderName, const char *filePa
 	rewind(file);
 
 	uint32_t *shaderData = calloc(size, 1);
-	printlog(fread(shaderData, 1, size, file) == size, __FUNCTION__, NULL);
+	printlog(fread(shaderData, 1, size, file) == size, NULL);
 	fclose(file);
 
 	VkShaderModuleCreateInfo shaderInfo = {0};
@@ -670,7 +667,7 @@ VkShaderModule initializeShaderModule(const char *shaderName, const char *filePa
 
 	VkShaderModule shaderModule;
 	printlog(vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule) == VK_SUCCESS,
-	 __FUNCTION__, "Created %s Shader Module: %zd bytes\n", shaderName, size);
+	 "Create %s Shader Module: %zd bytes", shaderName, size);
 	free(shaderData);
 
 	return shaderModule;
@@ -814,7 +811,7 @@ void createGraphicsPipeline()
 	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 
 	printlog(vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout) == VK_SUCCESS,
-	 __FUNCTION__, "Created Pipeline Layout: Set Layout Count = %d\n", pipelineLayoutInfo.setLayoutCount);
+	 "Create Pipeline Layout: Set Layout Count = %d", pipelineLayoutInfo.setLayoutCount);
 
 	VkGraphicsPipelineCreateInfo pipelineInfo = {0};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -833,7 +830,7 @@ void createGraphicsPipeline()
 	pipelineInfo.layout = pipelineLayout;
 
 	printlog(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline)
-	 == VK_SUCCESS, __FUNCTION__ , "Created Graphics Pipeline: %u x %u\n", width, height);
+	 == VK_SUCCESS, "Create Graphics Pipeline: %u x %u", width, height);
 
 	vkDestroyShaderModule(device, fragmentShader, NULL);
 	vkDestroyShaderModule(device, vertexShader, NULL);
@@ -846,7 +843,7 @@ void createCommandPool()
 	poolInfo.queueFamilyIndex = graphicsIndex;
 
 	printlog(vkCreateCommandPool(device, &poolInfo, NULL, &commandPool) == VK_SUCCESS,
-	 __FUNCTION__, "Created Command Pool: Queue Index = %u\n", graphicsIndex);
+	 "Create Command Pool: Queue Index = %u", graphicsIndex);
 }
 
 uint32_t chooseMemoryType(uint32_t filter, VkMemoryPropertyFlags flags)
@@ -870,7 +867,7 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	bufferInfo.usage = usage;
 	bufferInfo.size = size;
 
-	printlog(vkCreateBuffer(device, &bufferInfo, NULL, buffer) == VK_SUCCESS, __FUNCTION__, NULL);
+	printlog(vkCreateBuffer(device, &bufferInfo, NULL, buffer) == VK_SUCCESS, NULL);
 
 	VkMemoryRequirements memoryRequirements;
 	vkGetBufferMemoryRequirements(device, *buffer, &memoryRequirements);
@@ -880,7 +877,7 @@ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 	allocateInfo.allocationSize = memoryRequirements.size;
 	allocateInfo.memoryTypeIndex = chooseMemoryType(memoryRequirements.memoryTypeBits, properties);
 
-	printlog(vkAllocateMemory(device, &allocateInfo, NULL, bufferMemory) == VK_SUCCESS, __FUNCTION__, NULL);
+	printlog(vkAllocateMemory(device, &allocateInfo, NULL, bufferMemory) == VK_SUCCESS, NULL);
 	vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
 
@@ -893,7 +890,7 @@ VkCommandBuffer beginSingleTimeCommand()
 	allocateInfo.commandBufferCount = 1;
 
 	VkCommandBuffer commandBuffer;
-	printlog(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer) == VK_SUCCESS, __FUNCTION__, NULL);
+	printlog(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer) == VK_SUCCESS, NULL);
 
 	VkCommandBufferBeginInfo beginInfo = {0};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -950,7 +947,7 @@ void createImage(uint32_t imageWidth, uint32_t imageHeight, uint32_t levels, VkS
 	imageInfo.extent.depth = 1;
 
 	printlog(vkCreateImage(device, &imageInfo, NULL, image) == VK_SUCCESS,
-	 __FUNCTION__, "Created Image: %u x %u\n", imageWidth, imageHeight);
+	 "Create Image: %u x %u", imageWidth, imageHeight);
 
 	VkMemoryRequirements memoryRequirements;
 	vkGetImageMemoryRequirements(device, *image, &memoryRequirements);
@@ -961,7 +958,7 @@ void createImage(uint32_t imageWidth, uint32_t imageHeight, uint32_t levels, VkS
 	allocateInfo.memoryTypeIndex = chooseMemoryType(memoryRequirements.memoryTypeBits, properties);
 
 	printlog(vkAllocateMemory(device, &allocateInfo, NULL, memory) == VK_SUCCESS,
-	 __FUNCTION__, "Allocated Image Memory: Size = %lu bytes\n", memoryRequirements.size);
+	 "Allocate Image Memory: Size = %lu bytes", memoryRequirements.size);
 	vkBindImageMemory(device, *image, *memory, 0);
 }
 
@@ -1009,7 +1006,7 @@ void transitionImageLayout(VkImage image, uint32_t levels, VkFormat format, VkIm
 	}
 
 	else
-		printlog(0, __FUNCTION__, NULL);
+		printlog(0, NULL);
 
 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 	 stage, 0, 0, NULL, 0, NULL, 1, &barrier);
@@ -1043,7 +1040,7 @@ void createColorBuffer()
 	colorView = createImageView(colorImage, 1, swapchainFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 	transitionImageLayout(colorImage, 1, swapchainFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-	printlog(1, __FUNCTION__, "Created Color Buffer: %dx MSAA\n", msaaSamples);
+	printlog(1, "Create Color Buffer: %dx MSAA", msaaSamples);
 }
 
 void createDepthBuffer()
@@ -1056,7 +1053,7 @@ void createDepthBuffer()
 	depthView = createImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 	transitionImageLayout(depthImage, 1, depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-	printlog(depthFormat >= 0, __FUNCTION__, "Created Depth Buffer\n");
+	printlog(depthFormat >= 0, "Create Depth Buffer");
 }
 
 void createFramebuffers()
@@ -1075,18 +1072,17 @@ void createFramebuffers()
 		framebufferInfo.pAttachments = (VkImageView[]){colorView, depthView, swapchainViews[framebufferIndex]};
 
 		printlog(vkCreateFramebuffer(device, &framebufferInfo, NULL, &swapchainFramebuffers[framebufferIndex])
-		 == VK_SUCCESS, __FUNCTION__, NULL);
+		 == VK_SUCCESS, NULL);
 	}
 
-	printlog(1, NULL, "Created Framebuffers: Count = %u\n", framebufferSize);
+	printlog(1, "Create Framebuffers: Count = %u", framebufferSize);
 }
 
 void generateMipmaps(VkImage image, int32_t width, int32_t height, uint32_t levels, VkFormat format)
 {
 	VkFormatProperties formatProperties;
 	vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProperties);
-	printlog(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT,
-	 __FUNCTION__, NULL);
+	printlog(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, NULL);
 
 	VkCommandBuffer commandBuffer = beginSingleTimeCommand();
 
@@ -1154,7 +1150,7 @@ void generateMipmaps(VkImage image, int32_t width, int32_t height, uint32_t leve
 
 	endSingleTimeCommand(commandBuffer);
 
-	printlog(1, NULL, "Generated Mipmaps: %d Levels\n", levels);
+	printlog(1, "Generate Mipmaps: %d Levels", levels);
 }
 
 void createTextureImage()
@@ -1162,7 +1158,7 @@ void createTextureImage()
 	int textureWidth, textureHeight, textureChannels;
 	stbi_uc *pixels = stbi_load("textures/chalet.jpg",
 	 &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
-	printlog(pixels != NULL, __FUNCTION__, NULL);
+	printlog(pixels != NULL, NULL);
 	mipLevels = floor(log2f(fmaxf(textureWidth, textureHeight))) + 1;
 
 	VkBuffer stagingBuffer;
@@ -1212,8 +1208,7 @@ void createTextureSampler()
 	samplerInfo.minLod = 0.0f;
 	samplerInfo.maxLod = (float)mipLevels;
 
-	printlog(vkCreateSampler(device, &samplerInfo, NULL, &textureSampler) == VK_SUCCESS,
-	 __FUNCTION__, "Created Texture Sampler\n");
+	printlog(vkCreateSampler(device, &samplerInfo, NULL, &textureSampler) == VK_SUCCESS, "Create Texture Sampler");
 }
 
 uint16_t hashVertex(Vertex vertex)
@@ -1245,7 +1240,7 @@ void createObjectModel()
 	tinyobj_shape_t* shapes;
 	tinyobj_material_t* materials;
 	printlog(tinyobj_parse_obj(&attributes, &shapes, &shapeCount, &materials, &materialCount, data, size,
-	 TINYOBJ_FLAG_TRIANGULATE) == TINYOBJ_SUCCESS, __FUNCTION__, "Read Object File: %lu bytes\n", size);
+	 TINYOBJ_FLAG_TRIANGULATE) == TINYOBJ_SUCCESS, "Read Object File: %lu bytes", size);
 	munmap(data, size);
 
 	vertexSize = sizeof(Vertex);
@@ -1341,7 +1336,7 @@ void createVertexBuffer()
 	createBuffer(vertexCount * vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 	 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
 	copyBuffer(stagingBuffer, vertexBuffer, vertexCount * vertexSize);
-	printlog(1, NULL, "Created Vertex Buffer: Size = %lu bytes\n", vertexCount * vertexSize);
+	printlog(1, "Create Vertex Buffer: Size = %lu bytes", vertexCount * vertexSize);
 
 	vkFreeMemory(device, stagingBufferMemory, NULL);
 	vkDestroyBuffer(device, stagingBuffer, NULL);
@@ -1362,7 +1357,7 @@ void createIndexBuffer()
 	createBuffer(indexCount * indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 	 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
 	copyBuffer(stagingBuffer, indexBuffer, indexCount * indexSize);
-	printlog(1, NULL, "Created Index Buffer: Size = %lu bytes\n", indexCount * indexSize);
+	printlog(1, "Create Index Buffer: Size = %lu bytes", indexCount * indexSize);
 
 	vkFreeMemory(device, stagingBufferMemory, NULL);
 	vkDestroyBuffer(device, stagingBuffer, NULL);
@@ -1378,7 +1373,7 @@ void createUniformBuffers()
 		 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		 &uniformBuffers[uniformIndex], &uniformBufferMemories[uniformIndex]);
 
-	printlog(1, NULL, "Created Uniform Buffers\n");
+	printlog(1, "Create Uniform Buffers");
 }
 
 void createDescriptorPool()
@@ -1398,7 +1393,7 @@ void createDescriptorPool()
 	poolInfo.pPoolSizes = (VkDescriptorPoolSize[]){uniformBufferSize, imageSamplerSize};
 
 	printlog(vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool) == VK_SUCCESS,
-	 __FUNCTION__, "Created Descriptor Pool\n");
+	 "Create Descriptor Pool");
 }
 
 void createDescriptorSets()
@@ -1415,7 +1410,7 @@ void createDescriptorSets()
 
 	descriptorSets = malloc(framebufferSize * sizeof(VkDescriptorSet));
 	printlog(vkAllocateDescriptorSets(device, &descriptorSetInfo, descriptorSets) == VK_SUCCESS,
-	 __FUNCTION__, "Allocated Descriptor Sets\n");
+	 "Allocate Descriptor Sets");
 
 	for(uint32_t layoutIndex = 0; layoutIndex < framebufferSize; layoutIndex++)
 	{
@@ -1451,7 +1446,7 @@ void createDescriptorSets()
 		 {bufferDescriptorWrite, samplerDescriptorWrite}, 0, NULL);
 	}
 
-	printlog(1, NULL, "Updated Descriptor Sets\n");
+	printlog(1, "Update Descriptor Sets");
 }
 
 void createCommandBuffers()
@@ -1464,7 +1459,7 @@ void createCommandBuffers()
 
 	commandBuffers = malloc(framebufferSize * sizeof(VkCommandBuffer));
 	printlog(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers) == VK_SUCCESS,
-	 __FUNCTION__, "Allocated Command Buffers\n");
+	 "Allocate Command Buffers");
 
 	for(uint32_t commandIndex = 0; commandIndex < framebufferSize; commandIndex++)
 	{
@@ -1489,7 +1484,7 @@ void createCommandBuffers()
 		renderPassBeginInfo.clearValueCount = 2;
 		renderPassBeginInfo.pClearValues = clearValues;
 
-		printlog(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS, __FUNCTION__, NULL);
+		printlog(vkBeginCommandBuffer(commandBuffers[commandIndex], &beginInfo) == VK_SUCCESS, NULL);
 		vkCmdBeginRenderPass(commandBuffers[commandIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 		vkCmdBindDescriptorSets(commandBuffers[commandIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1498,10 +1493,10 @@ void createCommandBuffers()
 		vkCmdBindIndexBuffer(commandBuffers[commandIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(commandBuffers[commandIndex], indexCount, 1, 0, 0, 0);
 		vkCmdEndRenderPass(commandBuffers[commandIndex]);
-		printlog(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS, __FUNCTION__, NULL);
+		printlog(vkEndCommandBuffer(commandBuffers[commandIndex]) == VK_SUCCESS, NULL);
 	}
 
-	printlog(1, NULL, "Recorded Commands\n");
+	printlog(1, "Record Commands");
 }
 
 void createSyncObjects()
@@ -1525,7 +1520,7 @@ void createSyncObjects()
 		vkCreateFence(device, &fenceInfo, NULL, &frameFences[syncIndex]);
 	}
 
-	printlog(1, NULL, "Created Syncronization Objects\n");
+	printlog(1, "Create Syncronization Objects");
 }
 
 void recreateSwapchain()
@@ -1789,20 +1784,20 @@ void updateUniformBuffer(int index)
 	{
 		timeorig = timespec;
 		directionVector(up, (float[]){0.0f, 0.0f, -1.0f});
-		normalize(up);
 		directionVector(forward, (float[]){1.0f, 0.0f, 0.0f});
-		normalize(forward);
 		positionVector(position, (float[]){-1.5f, 0.0f, -0.5f});
+		normalize(forward);
+		normalize(up);
 		ready = 1;
 	}
 
 	long timediff = 1e6L * (timespec.tv_sec - timeorig.tv_sec) + (timespec.tv_nsec - timeorig.tv_nsec) / 1e3L;
-	float delta = PI * timediff / (2e6L * sqrtf(fmaxf((keyW || keyS) + (keyA || keyD) + (keyR || keyF), 1)));
+	float delta = M_PI * timediff / (2e6L * sqrtf(fmaxf((keyW || keyS) + (keyA || keyD) + (keyR || keyF), 1)));
 	timeorig = timespec;
 
 	cross(up, forward, left);
-	rotateVector(forward, up, PI * moveX / width);
-	rotateVector(forward, left, -PI * moveY / height);
+	rotateVector(forward, up, M_PI * moveX / width);
+	rotateVector(forward, left, -M_PI * moveY / height);
 	moveX = moveY = 0;
 
 	directionVector(direction, forward);
@@ -1822,7 +1817,7 @@ void updateUniformBuffer(int index)
 
 	identityMatrix(ubo.model);
 	cameraMatrix(ubo.view, position, center, up);
-	perspectiveMatrix(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.01f, 10.0f);
+	perspectiveMatrix(ubo.proj, M_PI / 2, (float)width / (float)height, 0.01f, 10.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
@@ -1834,7 +1829,7 @@ void draw()
 {
 	time_t currentTime = 0;
 	uint32_t currentFrame = 0, frameCount = 0, checkPoint = 0;
-	printlog(1, NULL, "Started Drawing...\n");
+	printlog(1, "Begin Drawing");
 
 	while(!glfwWindowShouldClose(window))
 	{
@@ -1892,7 +1887,7 @@ void draw()
 		}
 	}
 
-	printlog(1, NULL, "Drawing Ended\n");
+	printlog(1, "Finish Drawing");
 	vkDeviceWaitIdle(device);
 }
 
@@ -1925,7 +1920,7 @@ void cleanupSwapchain()
 
 void clean()
 {
-	printlog(1, NULL, "Started Cleaning\n");
+	printlog(1, "Start Cleaning");
 	for(uint32_t syncIndex = 0; syncIndex < framebufferLimit; syncIndex++)
 	{
 		vkDestroyFence(device, frameFences[syncIndex], NULL);
@@ -1972,7 +1967,7 @@ void clean()
 		destroyMessenger(instance, messenger, NULL);
 	vkDestroyInstance(instance, NULL);
 	glfwTerminate();
-	printlog(1, NULL, "Cleaned Up!\n");
+	printlog(1, "End Cleaning");
 }
 
 int main()
