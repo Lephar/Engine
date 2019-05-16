@@ -58,9 +58,11 @@ typedef struct uniformBufferObject UniformBufferObject;
 typedef struct swapchainDetails SwapchainDetails;
 
 GLFWwindow* window;
-int width, height, focus, ready, keyW, keyA, keyS, keyD, keyR, keyF;
+int width, height, focus, ready;
+int keyW, keyA, keyS, keyD, keyR, keyF;
 double moveX, moveY, mouseX, mouseY;
 float up[4], forward[4], position[4];
+Node *hashMap;
 struct timespec timespec, timeorig;
 
 VkInstance instance;
@@ -82,12 +84,13 @@ VkDescriptorSetLayout descriptorSetLayout;
 VkPipelineLayout pipelineLayout;
 VkPipeline graphicsPipeline;
 VkFramebuffer *swapchainFramebuffers;
-VkDeviceSize vertexCount, vertexSize, indexCount, indexSize;
+VkDeviceSize vertexCount, vertexLimit, vertexSize;
+VkDeviceSize indexCount, indexLimit, indexSize;
 Vertex *vertices;
 uint32_t *indices;
 VkBuffer vertexBuffer, indexBuffer;
-VkBuffer *uniformBuffers;
 VkDeviceMemory vertexBufferMemory, indexBufferMemory;
+VkBuffer *uniformBuffers;
 VkDeviceMemory *uniformBufferMemories;
 VkCommandPool commandPool;
 VkCommandBuffer *commandBuffers;
@@ -1226,9 +1229,9 @@ int compareVertex(Vertex v1, Vertex v2)
 	 v1.tex[0] == v2.tex[0] && v1.tex[1] == v2.tex[1];
 }
 
-void createObjectModel()
+void loadObject(const char *model, float *origin)
 {
-	int file = open("models/chalet.obj", O_RDONLY);
+	int file = open(model, O_RDONLY);
 	size_t size = lseek(file, 0, SEEK_END);
 	lseek(file, 0, SEEK_SET);
 	void *data = mmap(NULL, size, PROT_READ, MAP_SHARED, file, 0);
@@ -1243,22 +1246,14 @@ void createObjectModel()
 	 TINYOBJ_FLAG_TRIANGULATE) == TINYOBJ_SUCCESS, "Read Object File: %lu bytes", size);
 	munmap(data, size);
 
-	vertexSize = sizeof(Vertex);
-	vertexCount = attributes.num_faces / 4;
-	vertices = malloc(vertexCount * vertexSize);
-	indexSize = sizeof(uint32_t);
-	indexCount = attributes.num_faces;
-	indices = malloc(indexCount * indexSize);
-
 	uint32_t uniqueCount = 0;
-	Node *map = calloc(USHRT_MAX + 1, sizeof(Node));
 
-	for(uint32_t index = 0; index < indexCount; index++)
+	for(uint32_t index = 0; index < attributes.num_faces; index++)
 	{
 		Vertex vertex = {{{
-				 attributes.vertices[3 * attributes.faces[index].v_idx],
-				 attributes.vertices[3 * attributes.faces[index].v_idx + 1],
-				-attributes.vertices[3 * attributes.faces[index].v_idx + 2]
+				origin[0] + attributes.vertices[3 * attributes.faces[index].v_idx],
+				origin[1] + attributes.vertices[3 * attributes.faces[index].v_idx + 1],
+				origin[2] - attributes.vertices[3 * attributes.faces[index].v_idx + 2]
 			},{1.0f, 1.0f, 1.0f},{
 				 attributes.texcoords[2 * attributes.faces[index].vt_idx],
 				-attributes.texcoords[2 * attributes.faces[index].vt_idx + 1]
@@ -1266,59 +1261,91 @@ void createObjectModel()
 
 		uint16_t iterator = 0, hash = hashVertex(vertex);
 
-		while(iterator < map[hash].size && !compareVertex(vertex, *map[hash].vertices[iterator]))
+		while(iterator < hashMap[hash].size && !compareVertex(vertex, *hashMap[hash].vertices[iterator]))
 			iterator++;
 
-		if(iterator == map[hash].size)
+		if(iterator == hashMap[hash].size)
 		{
-			if(!map[hash].limit)
+			if(!hashMap[hash].limit)
 			{
-				map[hash].limit = 32;
-				map[hash].indices = malloc(map[hash].limit * sizeof(uint32_t));
-				map[hash].vertices = malloc(map[hash].limit * sizeof(Vertex*));
+				hashMap[hash].limit = 128;
+				hashMap[hash].indices = malloc(hashMap[hash].limit * sizeof(uint32_t));
+				hashMap[hash].vertices = malloc(hashMap[hash].limit * sizeof(Vertex*));
 			}
 
-			else if(map[hash].size == map[hash].limit)
+			else if(hashMap[hash].size == hashMap[hash].limit)
 			{
-				map[hash].limit *= 2;
-				map[hash].indices = realloc(map[hash].indices, map[hash].limit * sizeof(uint32_t));
-				map[hash].vertices = realloc(map[hash].vertices, map[hash].limit * sizeof(Vertex*));
+				hashMap[hash].limit *= 2;
+				hashMap[hash].indices = realloc(hashMap[hash].indices, hashMap[hash].limit * sizeof(uint32_t));
+				hashMap[hash].vertices = realloc(hashMap[hash].vertices, hashMap[hash].limit * sizeof(Vertex*));
 			}
 
-			if(uniqueCount == vertexCount)
+			if(vertexCount + uniqueCount == vertexLimit)
 			{
-				vertexCount *= 2;
-				vertices = realloc(vertices, vertexCount * vertexSize);
+				vertexLimit *= 2;
+				vertices = realloc(vertices, vertexLimit * vertexSize);
 			}
 
-			indices[index] = map[hash].indices[iterator] = uniqueCount;
-			vertices[uniqueCount] = vertex;
-			map[hash].vertices[iterator] = &vertices[uniqueCount];
+			indices[indexCount + index] = hashMap[hash].indices[iterator] = vertexCount + uniqueCount;
+			vertices[vertexCount + uniqueCount] = vertex;
+			hashMap[hash].vertices[iterator] = &vertices[vertexCount + uniqueCount];
 			uniqueCount++;
-			map[hash].size++;
+			hashMap[hash].size++;
 		}
 
 		else
-			indices[index] = map[hash].indices[iterator];
+			indices[indexCount + index] = hashMap[hash].indices[iterator];
 	}
 
-	vertexCount = uniqueCount;
-	vertices = realloc(vertices, vertexCount * vertexSize);
-
+	vertexCount += uniqueCount;
+	indexCount += attributes.num_faces;
 	tinyobj_materials_free(materials, materialCount);
 	tinyobj_shapes_free(shapes, shapeCount);
 	tinyobj_attrib_free(&attributes);
+}
+
+void createObjectModels()
+{
+	vertexCount = 0;
+	vertexLimit = INT_MAX / 1024;
+	vertexSize = sizeof(Vertex);
+	vertices = malloc(vertexLimit *vertexSize);
+	indexCount = 0;
+	indexLimit = INT_MAX / 256;
+	indexSize = sizeof(uint32_t);
+	indices = malloc(indexLimit * indexSize);
+	hashMap = calloc(USHRT_MAX + 1, sizeof(Node));
+
+	loadObject("models/chalet.obj", (float[]){-1.0f, -1.0f, 0.0f});
+	loadObject("models/chalet.obj", (float[]){-1.0f, 1.0f, 0.0f});
+	loadObject("models/chalet.obj", (float[]){1.0f, -1.0f, 0.0f});
+	loadObject("models/chalet.obj", (float[]){1.0f, 1.0f, 0.0f});
+
+	vertices[vertexCount + 0] = (Vertex){{{-10.0f, -10.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.03125f, 0.84375f}}};
+	vertices[vertexCount + 1] = (Vertex){{{ 10.0f, -10.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.125f,   0.84375f}}};
+	vertices[vertexCount + 2] = (Vertex){{{ 10.0f,  10.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.125f,   0.9375f}}};
+	vertices[vertexCount + 3] = (Vertex){{{-10.0f,  10.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.03125f, 0.9375f}}};
+
+	indices[indexCount + 0] = vertexCount;
+	indices[indexCount + 1] = vertexCount + 1;
+	indices[indexCount + 2] = vertexCount + 2;
+	indices[indexCount + 3] = vertexCount;
+	indices[indexCount + 4] = vertexCount + 2;
+	indices[indexCount + 5] = vertexCount + 3;
+
+	vertexCount += 4;
+	indexCount += 6;
 
 	for(uint32_t index = 0; index < USHRT_MAX + 1; index++)
 	{
-		if(map[index].limit)
+		if(hashMap[index].limit)
 		{
-			free(map[index].indices);
-			free(map[index].vertices);
+			free(hashMap[index].indices);
+			free(hashMap[index].vertices);
 		}
 	}
 
-	free(map);
+	free(hashMap);
 }
 
 void createVertexBuffer()
@@ -1565,7 +1592,7 @@ void setup()
 	createFramebuffers();
 	createTextureImage();
 	createTextureSampler();
-	createObjectModel();
+	createObjectModels();
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
@@ -1785,14 +1812,14 @@ void updateUniformBuffer(int index)
 		timeorig = timespec;
 		directionVector(up, (float[]){0.0f, 0.0f, -1.0f});
 		directionVector(forward, (float[]){1.0f, 0.0f, 0.0f});
-		positionVector(position, (float[]){-1.5f, 0.0f, -0.5f});
+		positionVector(position, (float[]){-3.2f, 0.0f, -0.4f});
 		normalize(forward);
 		normalize(up);
 		ready = 1;
 	}
 
 	long timediff = 1e6L * (timespec.tv_sec - timeorig.tv_sec) + (timespec.tv_nsec - timeorig.tv_nsec) / 1e3L;
-	float delta = M_PI * timediff / (2e6L * sqrtf(fmaxf((keyW || keyS) + (keyA || keyD) + (keyR || keyF), 1)));
+	float delta = M_PI * timediff / (4e6L * sqrtf(fmaxf(1, (keyW || keyS) + (keyA || keyD) + (keyR || keyF))));
 	timeorig = timespec;
 
 	cross(up, forward, left);
@@ -1812,12 +1839,13 @@ void updateUniformBuffer(int index)
 	scaleVector(direction, delta * (keyR - keyF));
 	translateVector(position, direction);
 
+	position[2] = fminf(-0.4f, position[2]);
 	positionVector(center, position);
 	translateVector(center, forward);
 
 	identityMatrix(ubo.model);
 	cameraMatrix(ubo.view, position, center, up);
-	perspectiveMatrix(ubo.proj, M_PI / 2, (float)width / (float)height, 0.01f, 10.0f);
+	perspectiveMatrix(ubo.proj, M_PI / 2, (float)width / (float)height, 0.01f, 100.0f);
 
 	void *data;
 	vkMapMemory(device, uniformBufferMemories[index], 0, sizeof(ubo), 0, &data);
