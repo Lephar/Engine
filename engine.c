@@ -61,12 +61,10 @@ typedef struct uniformBufferObject UniformBufferObject;
 typedef struct swapchainDetails SwapchainDetails;
 
 GLFWwindow* window;
-int width, height, state, initialized;
+int width, height, focus, ready, keyW, keyA, keyS, keyD, keyR, keyF;
 double moveX, moveY, mouseX, mouseY;
-float position[4], direction[4];
-int keyW, keyA, keyS, keyD, keyR, keyF;
-long timeorig;
-struct timespec timespec;
+float up[4], forward[4], position[4];
+struct timespec timespec, timeorig;
 
 VkInstance instance;
 VkDebugUtilsMessengerEXT messenger;
@@ -194,46 +192,52 @@ void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
 	(void)mods;
 	(void)scancode;
 
-	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+	if(focus)
 	{
-		if(state)
+		if(action == GLFW_RELEASE)
 		{
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			glfwGetCursorPos(window, &mouseX, &mouseY);
+			if(key == GLFW_KEY_W)
+				keyW = 0;
+			else if(key == GLFW_KEY_S)
+				keyS = 0;
+			else if(key == GLFW_KEY_A)
+				keyA = 0;
+			else if(key == GLFW_KEY_D)
+				keyD = 0;
+			else if(key == GLFW_KEY_R)
+				keyR = 0;
+			else if(key == GLFW_KEY_F)
+				keyF = 0;
 		}
-		else
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-		state = !state;
+
+		else if(action == GLFW_PRESS)
+		{
+			if(key == GLFW_KEY_W)
+				keyW = 1;
+			else if(key == GLFW_KEY_S)
+				keyS = 1;
+			else if(key == GLFW_KEY_A)
+				keyA = 1;
+			else if(key == GLFW_KEY_D)
+				keyD = 1;
+			else if(key == GLFW_KEY_R)
+				keyR = 1;
+			else if(key == GLFW_KEY_F)
+				keyF = 1;
+			else if(key == GLFW_KEY_ESCAPE)
+			{
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+				focus = keyW = keyS = keyA = keyD = keyR = keyF = 0;
+			}
+		}
 	}
 
-	if(!state)
+	else if(action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
 	{
-		if(key == GLFW_KEY_W && action == GLFW_PRESS)
-			keyW = 1;
-		if(key == GLFW_KEY_S && action == GLFW_PRESS)
-			keyS = 1;
-		if(key == GLFW_KEY_A && action == GLFW_PRESS)
-			keyA = 1;
-		if(key == GLFW_KEY_D && action == GLFW_PRESS)
-			keyD = 1;
-		if(key == GLFW_KEY_R && action == GLFW_PRESS)
-			keyR = 1;
-		if(key == GLFW_KEY_F && action == GLFW_PRESS)
-			keyF = 1;
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwGetCursorPos(window, &mouseX, &mouseY);
+		focus = 1;
 	}
-
-	if(key == GLFW_KEY_W && action == GLFW_RELEASE)
-		keyW = 0;
-	if(key == GLFW_KEY_S && action == GLFW_RELEASE)
-		keyS = 0;
-	if(key == GLFW_KEY_A && action == GLFW_RELEASE)
-		keyA = 0;
-	if(key == GLFW_KEY_D && action == GLFW_RELEASE)
-		keyD = 0;
-	if(key == GLFW_KEY_R && action == GLFW_RELEASE)
-		keyR = 0;
-	if(key == GLFW_KEY_F && action == GLFW_RELEASE)
-		keyF = 0;
 }
 
 void mouseEvent(GLFWwindow* window, double x, double y)
@@ -259,6 +263,7 @@ void resizeEvent(GLFWwindow* window, int w, int h)
 
 void createSurface()
 {
+	focus = 1;
 	width = 800;
 	height = 600;
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -1636,11 +1641,11 @@ void multiplyMatrix(float a[], float b[], float c[])
 				c[4 * row + col] += a[4 * row + itr] * b[4 * itr + col];
 }
 
-void scaleVector(float v[], float t[])
+void scaleVector(float v[], float t)
 {
-	v[0] *= t[0];
-	v[1] *= t[1];
-	v[2] *= t[2];
+	v[0] *= t;
+	v[1] *= t;
+	v[2] *= t;
 }
 
 void scaleMatrix(float m[], float v[])
@@ -1777,51 +1782,46 @@ void perspectiveMatrix(float m[], float fov, float asp, float n, float f)
 
 void updateUniformBuffer(int index)
 {
-	if(!initialized)
+	UniformBufferObject ubo = {0};
+	float center[4], left[4], direction[4];
+
+	if(!ready)
 	{
-		directionVector(direction, (float[]){1.0f, 0.0f, 0.0f});
+		timeorig = timespec;
+		directionVector(up, (float[]){0.0f, 0.0f, -1.0f});
+		normalize(up);
+		directionVector(forward, (float[]){1.0f, 0.0f, 0.0f});
+		normalize(forward);
 		positionVector(position, (float[]){-1.5f, 0.0f, -0.5f});
-		initialized = 1;
+		ready = 1;
 	}
 
-	float center[4], up[4], right[4];
-	UniformBufferObject ubo = {0};
+	long timediff = 1e6L * (timespec.tv_sec - timeorig.tv_sec) + (timespec.tv_nsec - timeorig.tv_nsec) / 1e3L;
+	float delta = PI * timediff / (2e6L * sqrtf(fmaxf((keyW || keyS) + (keyA || keyD) + (keyR || keyF), 1)));
+	timeorig = timespec;
 
-	long timediff = (timespec.tv_nsec - timeorig);
-	timeorig = timespec.tv_nsec;
-	if(timediff < 0)
-		timediff += 1e9L;
-	float delta = 2 * PI * timediff / 4e9L;
-	if((keyW && keyA) || (keyW && keyD) || (keyS && keyA) || (keyS && keyD))
-		delta /= sqrtf(2);
+	cross(up, forward, left);
+	rotateVector(forward, up, PI * moveX / width);
+	rotateVector(forward, left, -PI * moveY / height);
+	moveX = moveY = 0;
 
-	directionVector(up, (float[]){0.0f, 0.0f, -1.0f});
-	cross(direction, up, right);
-	normalize(right);
+	directionVector(direction, forward);
+	scaleVector(direction, delta * (keyW - keyS));
+	translateVector(position, direction);
 
-	if(keyW)
-		translateVector(position, (float[]){direction[0] * delta, direction[1] * delta, direction[2] * delta});
-	if(keyS)
-		translateVector(position, (float[]){-direction[0] * delta, -direction[1] * delta, -direction[2] * delta});
-	if(keyA)
-		translateVector(position, (float[]){-right[0] * delta, -right[1] * delta, -right[2] * delta});
-	if(keyD)
-		translateVector(position, (float[]){right[0] * delta, right[1] * delta, right[2] * delta});
-	if(keyR)
-		translateVector(position, (float[]){up[0] * delta, up[1] * delta, up[2] * delta});
-	if(keyF)
-		translateVector(position, (float[]){-up[0] * delta, -up[1] * delta, -up[2] * delta});
+	directionVector(direction, left);
+	scaleVector(direction, delta * (keyA - keyD));
+	translateVector(position, direction);
+
+	directionVector(direction, up);
+	scaleVector(direction, delta * (keyR - keyF));
+	translateVector(position, direction);
 
 	positionVector(center, position);
-	rotateVector(direction, up, PI * moveX / width);
-	rotateVector(direction, right, PI * moveY / height);
-	translateVector(center, direction);
-
-	moveX = 0;
-	moveY = 0;
+	translateVector(center, forward);
 
 	identityMatrix(ubo.model);
-	cameraMatrix(ubo.view, position, center, (float[]){0.0f, 0.0f, -1.0f});
+	cameraMatrix(ubo.view, position, center, up);
 	perspectiveMatrix(ubo.proj, PI / 2, (float)swapchainExtent.width / (float)swapchainExtent.height, 0.01f, 10.0f);
 
 	void *data;
