@@ -61,6 +61,7 @@ GLFWwindow* window;
 int width, height, focus, ready;
 int keyW, keyA, keyS, keyD, keyR, keyF;
 double moveX, moveY, mouseX, mouseY;
+int fillMode, cullMode;
 float up[4], forward[4], position[4];
 Node *hashMap;
 struct timespec timespec, timeorig;
@@ -225,6 +226,16 @@ void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
 				keyR = 1;
 			else if(key == GLFW_KEY_F)
 				keyF = 1;
+			else if(key == GLFW_KEY_C)
+			{
+				cullMode = !cullMode;
+				recreateSwapchain();
+			}
+			else if(key == GLFW_KEY_V)
+			{
+				fillMode = !fillMode;
+				recreateSwapchain();
+			}
 			else if(key == GLFW_KEY_ESCAPE)
 			{
 				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -403,6 +414,7 @@ void createLogicalDevice()
 	VkPhysicalDeviceFeatures deviceFeatures = {0};
 	deviceFeatures.samplerAnisotropy = VK_TRUE;
 	deviceFeatures.sampleRateShading = VK_TRUE;
+	deviceFeatures.fillModeNonSolid = VK_TRUE;
 
 	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
@@ -768,13 +780,12 @@ void createGraphicsPipeline()
 	VkPipelineRasterizationStateCreateInfo rasterizerInfo = {0};
 	rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizerInfo.lineWidth = 1.0f;
+	rasterizerInfo.depthBiasEnable = VK_FALSE;
 	rasterizerInfo.depthClampEnable = VK_FALSE;
 	rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
-	rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-	//rasterizerInfo.cullMode = VK_CULL_MODE_NONE;
-	rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizerInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	rasterizerInfo.depthBiasEnable = VK_FALSE;
+	rasterizerInfo.polygonMode = fillMode ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+	rasterizerInfo.cullMode = cullMode ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
 
 	VkPipelineMultisampleStateCreateInfo multisamplingInfo = {0};
 	multisamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
