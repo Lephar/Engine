@@ -110,6 +110,8 @@ void setup();
 void clean();
 void recreateSwapchain();
 void cleanupSwapchain();
+void recreatePipeline();
+void cleanupPipeline();
 
 void printlog(int success, const char *format, ...)
 {
@@ -229,12 +231,12 @@ void keyEvent(GLFWwindow* window, int key, int scancode, int action, int mods)
 			else if(key == GLFW_KEY_C)
 			{
 				cullMode = !cullMode;
-				recreateSwapchain();
+				recreatePipeline();
 			}
 			else if(key == GLFW_KEY_V)
 			{
 				fillMode = !fillMode;
-				recreateSwapchain();
+				recreatePipeline();
 			}
 			else if(key == GLFW_KEY_ESCAPE)
 			{
@@ -1253,6 +1255,7 @@ void loadObject(const char *model, float *origin)
 	tinyobj_attrib_t attributes;
 	tinyobj_shape_t* shapes;
 	tinyobj_material_t* materials;
+
 	printlog(tinyobj_parse_obj(&attributes, &shapes, &shapeCount, &materials, &materialCount, data, size,
 	 TINYOBJ_FLAG_TRIANGULATE) == TINYOBJ_SUCCESS, "Read Object File: %lu bytes", size);
 	munmap(data, size);
@@ -1310,6 +1313,7 @@ void loadObject(const char *model, float *origin)
 
 	vertexCount += uniqueCount;
 	indexCount += attributes.num_faces;
+
 	tinyobj_materials_free(materials, materialCount);
 	tinyobj_shapes_free(shapes, shapeCount);
 	tinyobj_attrib_free(&attributes);
@@ -1320,11 +1324,13 @@ void createObjectModels()
 	vertexCount = 0;
 	vertexLimit = INT_MAX / 1024;
 	vertexSize = sizeof(Vertex);
-	vertices = malloc(vertexLimit *vertexSize);
+	vertices = malloc(vertexLimit * vertexSize);
+
 	indexCount = 0;
 	indexLimit = INT_MAX / 256;
 	indexSize = sizeof(uint32_t);
 	indices = malloc(indexLimit * indexSize);
+
 	hashMap = calloc(USHRT_MAX + 1, sizeof(Node));
 
 	loadObject("models/chalet.obj", (float[]){-1.0f, -1.0f, 0.0f});
@@ -1346,6 +1352,9 @@ void createObjectModels()
 
 	vertexCount += 4;
 	indexCount += 6;
+
+	vertices = realloc(vertices, vertexCount * vertexSize);
+	indices = realloc(indices, indexCount * indexSize);
 
 	for(uint32_t index = 0; index < USHRT_MAX + 1; index++)
 	{
@@ -1449,6 +1458,7 @@ void createDescriptorSets()
 	descriptorSets = malloc(framebufferSize * sizeof(VkDescriptorSet));
 	printlog(vkAllocateDescriptorSets(device, &descriptorSetInfo, descriptorSets) == VK_SUCCESS,
 	 "Allocate Descriptor Sets");
+	free(layouts);
 
 	for(uint32_t layoutIndex = 0; layoutIndex < framebufferSize; layoutIndex++)
 	{
@@ -1559,6 +1569,15 @@ void createSyncObjects()
 	}
 
 	printlog(1, "Create Syncronization Objects");
+}
+
+void recreatePipeline()
+{
+	vkDeviceWaitIdle(device);
+	cleanupPipeline();
+
+	createGraphicsPipeline();
+	createCommandBuffers();
 }
 
 void recreateSwapchain()
@@ -1930,6 +1949,15 @@ void draw()
 	vkDeviceWaitIdle(device);
 }
 
+void cleanupPipeline()
+{
+	vkFreeCommandBuffers(device, commandPool, framebufferSize, commandBuffers);
+	vkDestroyPipeline(device, graphicsPipeline, NULL);
+	vkDestroyPipelineLayout(device, pipelineLayout, NULL);
+
+	free(commandBuffers);
+}
+
 void cleanupSwapchain()
 {
 	vkDestroyImageView(device, depthView, NULL);
@@ -1953,8 +1981,16 @@ void cleanupSwapchain()
 		vkDestroyBuffer(device, uniformBuffers[uniformIndex], NULL);
 		vkFreeMemory(device, uniformBufferMemories[uniformIndex], NULL);
 	}
+
 	free(swapchainDetails.presentModes);
 	free(swapchainDetails.surfaceFormats);
+	free(swapchainViews);
+	free(swapchainImages);
+	free(swapchainFramebuffers);
+	free(uniformBuffers);
+	free(uniformBufferMemories);
+	free(descriptorSets);
+	free(commandBuffers);
 }
 
 void clean()
