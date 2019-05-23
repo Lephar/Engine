@@ -8,7 +8,7 @@ Dependencies are rather minimal;
  -GLSL compiler for shader compilation
 
 Assuming you are on an up-to-date system, you can get the dependencies as such:
- Arch / Manjaro / Antergos:
+ Arch / Manjaro:
   sudo pacman -S glfw vulkan-devel
 
  Fedora / CentOS / RHEL:
