@@ -144,10 +144,11 @@ void createInstance()
 
 	uint32_t extensionCount;
 	const char **extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+	const char **extensionNames = malloc((extensionCount + 1) * sizeof(char*));
+	memcpy(extensionNames, extensions, extensionCount * sizeof(char*));
+	extensions[extensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	extensionCount++;
-	extensions = realloc(extensions, extensionCount * sizeof(char*));
-	extensions[extensionCount - 1] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-
+	
 	VkInstanceCreateInfo instanceInfo = {0};
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pApplicationInfo = &appInfo;
