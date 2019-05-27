@@ -1,4 +1,4 @@
-CC = gcc
+CC = clang
 SLC = glslangValidator
 CFLAGS = -std=gnu17 -march=native -Ofast -Wall -Wextra
 LDLIBS = -lm -lglfw -lvulkan
