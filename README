@@ -2,23 +2,23 @@ Game engine as Vulkan practice
 
 Dependencies are rather minimal;
  -Vulkan compatible GPU with up-to-date drivers
- -C17 (bug fix version of C11) compatible version of GCC
+ -C17 (bug fix version of C11) compatible version of Clang
  -GLFW library for window creation
  -Vulkan headers for core renderer
  -GLSL compiler for shader compilation
 
 Assuming you are on an up-to-date system, you can get the dependencies as such:
  Arch / Manjaro:
-  sudo pacman -S glfw vulkan-devel
+  sudo pacman -S glfw vulkan-devel clang
 
  Fedora / CentOS / RHEL:
-  sudo dnf install glfw3 vulkan-headers vulkan-validation-layers glslang
+  sudo dnf install glfw3 vulkan-headers vulkan-validation-layers glslang clang
 
  Debian / Ubuntu / Elementary / Mint:
-  sudo apt-get install libglfw3-dev libvulkan-dev vulkan-validationlayers-dev glslang-tools
+  sudo apt-get install libglfw3-dev libvulkan-dev vulkan-validationlayers-dev glslang-tools clang
 
  Solus:
-  sudo eopkg install system.devel glfw vulkan-headers vulkan-validation-layers glslang
+  sudo eopkg install system.devel glfw vulkan-headers vulkan-validation-layers glslang clang
 
 And to compile and execute the engine, simply run:
  make
