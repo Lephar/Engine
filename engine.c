@@ -80,6 +80,7 @@ VkFormat swapchainFormat;
 VkExtent2D swapchainExtent;
 VkImage *swapchainImages;
 VkImageView *swapchainViews;
+VkShaderModule vertexShader, fragmentShader;
 VkRenderPass renderPass;
 VkDescriptorSetLayout descriptorSetLayout;
 VkPipelineLayout pipelineLayout;
@@ -729,16 +730,20 @@ VkVertexInputAttributeDescription generateTextureInputAttributes()
 	return inputAttribute;
 }
 
+void createShaderModules()
+{
+	vertexShader = initializeShaderModule("Vertex", "shaders/vert.spv");
+	fragmentShader = initializeShaderModule("Fragment", "shaders/frag.spv");
+}
+
 void createGraphicsPipeline()
 {
-	VkShaderModule vertexShader = initializeShaderModule("Vertex", "shaders/vert.spv");
 	VkPipelineShaderStageCreateInfo vertexStageInfo = {};
 	vertexStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vertexStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
 	vertexStageInfo.module = vertexShader;
 	vertexStageInfo.pName = "main";
 
-	VkShaderModule fragmentShader = initializeShaderModule("Fragment", "shaders/frag.spv");
 	VkPipelineShaderStageCreateInfo fragmentStageInfo = {};
 	fragmentStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	fragmentStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -847,9 +852,6 @@ void createGraphicsPipeline()
 
 	printlog(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &graphicsPipeline)
 	 == VK_SUCCESS, "Create Graphics Pipeline: %u x %u", width, height);
-
-	vkDestroyShaderModule(device, fragmentShader, NULL);
-	vkDestroyShaderModule(device, vertexShader, NULL);
 }
 
 void createCommandPool()
@@ -1615,6 +1617,7 @@ void setup()
 	createSwapchain();
 	createRenderPass();
 	createDescriptorSetLayout();
+	createShaderModules();
 	createGraphicsPipeline();
 	createCommandPool();
 	createColorBuffer();
@@ -2029,6 +2032,8 @@ void clean()
 	vkDestroyPipeline(device, graphicsPipeline, NULL);
 	vkDestroyPipelineLayout(device, pipelineLayout, NULL);
 	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
+	vkDestroyShaderModule(device, vertexShader, NULL);
+	vkDestroyShaderModule(device, fragmentShader, NULL);
 	vkDestroyRenderPass(device, renderPass, NULL);
 	for(uint32_t viewIndex = 0; viewIndex < framebufferSize; viewIndex++)
 		vkDestroyImageView(device, swapchainViews[viewIndex], NULL);

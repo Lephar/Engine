@@ -9,7 +9,7 @@ Dependencies are rather minimal;
 
 Assuming you are on an up-to-date system, you can get the dependencies as such:
  Arch / Manjaro:
-  sudo pacman -S glfw vulkan-devel clang
+  sudo pacman -S glfw vulkan-devel shaderc clang
 
  Fedora / CentOS / RHEL:
   sudo dnf install glfw3 vulkan-headers vulkan-validation-layers glslang clang
@@ -19,6 +19,11 @@ Assuming you are on an up-to-date system, you can get the dependencies as such:
 
  Solus:
   sudo eopkg install system.devel glfw vulkan-headers vulkan-validation-layers glslang clang
+
+Only Arch based distros have shaderc on their repos,
+so you may need to get it yourself on other distros.
+Alternatively you can switch to glslangValidator from glslc.
+It is also possible to switch to gcc from clang.
 
 And to compile and execute the engine, simply run:
  make

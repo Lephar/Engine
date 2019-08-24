@@ -1,6 +1,6 @@
 CC = clang
-SLC = glslangValidator
-CFLAGS = -std=gnu17 -march=native -Ofast -Wall -Wextra
+SLC = glslc
+CFLAGS = -std=gnu17 -march=native -mtune=native -Ofast -Wall -Wextra
 LDLIBS = -lm -lglfw -lvulkan
 SOURCES = engine.c
 VSHADES = shaders/shader.vert
@@ -15,10 +15,10 @@ $(OBJECTS): $(SOURCES)
 	$(CC) $< -o $@ $(CFLAGS) $(LDLIBS)
 
 $(VMODS): $(VSHADES)
-	$(SLC) -V $< -o $@
+	$(SLC) $< -o $@ -O
 
 $(FMODS): $(FSHADES)
-	$(SLC) -V $< -o $@
+	$(SLC) $< -o $@ -O
 
 clean:
 	rm $(OBJECTS) $(VMODS) $(FMODS)
