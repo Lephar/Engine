@@ -133,33 +133,6 @@ void printlog(int success, const char *format, ...)
 		exit(1);
 }
 
-void createInstance()
-{
-	VkApplicationInfo appInfo = {};
-	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pApplicationName = "Engine";
-	appInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
-	appInfo.pEngineName = "Vulkan Engine";
-	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-	appInfo.apiVersion = VK_API_VERSION_1_1;
-
-	uint32_t extensionCount;
-	const char **extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
-	const char *extensionNames[extensionCount + 1];
-	memcpy(extensionNames, extensions, extensionCount * sizeof(char*));
-	extensions[extensionCount++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-
-	VkInstanceCreateInfo instanceInfo = {};
-	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	instanceInfo.pApplicationInfo = &appInfo;
-	instanceInfo.enabledLayerCount = 1;
-	instanceInfo.ppEnabledLayerNames = (const char*[]){"VK_LAYER_LUNARG_standard_validation"};
-	instanceInfo.enabledExtensionCount = extensionCount;
-	instanceInfo.ppEnabledExtensionNames = extensions;
-
-	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS, "Create Vulkan Instance");
-}
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
  VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
  const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData)
@@ -172,8 +145,22 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 	return VK_FALSE;
 }
 
-void registerMessenger()
+void createInstance()
 {
+	uint32_t extensionCount;
+	const char **extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+	const char *extensionNames[extensionCount + 1];
+	memcpy(extensionNames, extensions, extensionCount * sizeof(char*));
+	extensions[extensionCount++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	
+	VkApplicationInfo appInfo = {};
+	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pApplicationName = "Engine";
+	appInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
+	appInfo.pEngineName = "Vulkan Engine";
+	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
+	appInfo.apiVersion = VK_API_VERSION_1_2;
+	
 	VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {};
 	messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	messengerInfo.messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
@@ -185,7 +172,17 @@ void registerMessenger()
 	 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	messengerInfo.pfnUserCallback = messageCallback;
 	messengerInfo.pUserData = NULL;
-
+	
+	VkInstanceCreateInfo instanceInfo = {};
+	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	instanceInfo.pApplicationInfo = &appInfo;
+	instanceInfo.enabledLayerCount = 1;
+	instanceInfo.ppEnabledLayerNames = (const char*[]){"VK_LAYER_KHRONOS_validation"};
+	instanceInfo.enabledExtensionCount = extensionCount;
+	instanceInfo.ppEnabledExtensionNames = extensions;
+	instanceInfo.pNext = &messengerInfo;
+	
+	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS, "Create Vulkan Instance");
 	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
 	 (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 	printlog(createMessenger != NULL && createMessenger(instance, &messengerInfo, NULL, &messenger) == VK_SUCCESS,
@@ -419,15 +416,12 @@ void createLogicalDevice()
 	deviceFeatures.sampleRateShading = VK_TRUE;
 	deviceFeatures.fillModeNonSolid = VK_TRUE;
 
-	const char *layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
-	uint32_t layerCount = sizeof(layerNames) / sizeof(layerNames[0]);
+	
 	const char *extensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
 
 	VkDeviceCreateInfo deviceInfo = {};
 	deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	deviceInfo.enabledLayerCount = layerCount;
-	deviceInfo.ppEnabledLayerNames = layerNames;
 	deviceInfo.enabledExtensionCount = extensionCount;
 	deviceInfo.ppEnabledExtensionNames = extensionNames;
 	deviceInfo.pEnabledFeatures = &deviceFeatures;
@@ -1610,7 +1604,6 @@ void setup()
 {
 	glfwInit();
 	createInstance();
-	registerMessenger();
 	createSurface();
 	pickPhysicalDevice();
 	createLogicalDevice();
