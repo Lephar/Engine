@@ -38,13 +38,14 @@ Assuming you are on an up-to-date system, you can get the dependencies as such:
 
 And to compile and execute the engine, simply run:
 
-`make`
-
-`./engine.o`
+```
+make
+./engine.o
+```
 
 Press ESC to switch between the cursor mode and the camera mode.
 
 # Credits
 
-Special thanks to our tester [Kapkic](https://gitlab.com/kapkic) and
+Special thanks to our tester [Kapkic](https://gitlab.com/kapkic), and
 [Vulkan Tutorial](https://vulkan-tutorial.com/) creators and contributors
