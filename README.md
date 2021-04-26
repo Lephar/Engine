@@ -40,7 +40,7 @@ And to compile and execute the engine, simply run:
 
 ```
 make
-./engine.o
+./engine
 ```
 
 Press ESC to switch between the cursor mode and the camera mode.
