@@ -46,5 +46,5 @@ Press ESC to switch between the cursor mode and the camera mode.
 
 # Credits
 
-Special thanks to our tester (Kapkic)[https://gitlab.com/kapkic] and
-(Vulkan Tutorial)[https://vulkan-tutorial.com/] creators and contributors
+Special thanks to our tester [Kapkic](https://gitlab.com/kapkic) and
+[Vulkan Tutorial](https://vulkan-tutorial.com/) creators and contributors
