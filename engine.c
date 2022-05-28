@@ -159,7 +159,7 @@ void createInstance()
 	appInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
 	appInfo.pEngineName = "Vulkan Engine";
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-	appInfo.apiVersion = VK_API_VERSION_1_2;
+	appInfo.apiVersion = VK_API_VERSION_1_3;
 	
 	VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {};
 	messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -525,10 +525,9 @@ void createSwapchain()
 	framebufferSize = swapchainDetails.capabilities.minImageCount +
 	 (swapchainDetails.capabilities.minImageCount < swapchainDetails.capabilities.maxImageCount);
 	swapchainFormat = surfaceFormat.format;
-	swapchainExtent = swapchainDetails.capabilities.currentExtent;
-	width = swapchainExtent.width;
-	height = swapchainExtent.height;
-
+	swapchainExtent.width = width;
+	swapchainExtent.height = height;
+	
 	VkSwapchainCreateInfoKHR swapchainInfo = {};
 	swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapchainInfo.surface = surface;
@@ -553,7 +552,8 @@ void createSwapchain()
 	}
 
 	printlog(vkCreateSwapchainKHR(device, &swapchainInfo, NULL, &swapchain) == VK_SUCCESS,
-	 "Create Swapchain: %s Mode", presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate");
+	 "Create Swapchain: %s mode with %d images",
+	 presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox" : "Immediate", framebufferSize);
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, NULL);
 	swapchainImages = malloc(framebufferSize * sizeof(VkImage));
 	vkGetSwapchainImagesKHR(device, swapchain, &framebufferSize, swapchainImages);
