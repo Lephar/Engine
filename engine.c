@@ -151,8 +151,9 @@ void createInstance()
 	const char **extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
 	const char *extensionNames[extensionCount + 1];
 	memcpy(extensionNames, extensions, extensionCount * sizeof(char*));
-	extensions[extensionCount++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-	
+	extensionNames[extensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	extensionCount++;
+
 	VkApplicationInfo appInfo = {};
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	appInfo.pApplicationName = "Engine";
@@ -160,11 +161,11 @@ void createInstance()
 	appInfo.pEngineName = "Vulkan Engine";
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_3;
-	
+
 	VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {};
 	messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	messengerInfo.messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-	 //VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+	messengerInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+	 VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
 	 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 	 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	messengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
@@ -172,16 +173,16 @@ void createInstance()
 	 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	messengerInfo.pfnUserCallback = messageCallback;
 	messengerInfo.pUserData = NULL;
-	
+
 	VkInstanceCreateInfo instanceInfo = {};
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pApplicationInfo = &appInfo;
 	instanceInfo.enabledLayerCount = 1;
 	instanceInfo.ppEnabledLayerNames = (const char*[]){"VK_LAYER_KHRONOS_validation"};
 	instanceInfo.enabledExtensionCount = extensionCount;
-	instanceInfo.ppEnabledExtensionNames = extensions;
+	instanceInfo.ppEnabledExtensionNames = extensionNames;
 	instanceInfo.pNext = &messengerInfo;
-	
+
 	printlog(vkCreateInstance(&instanceInfo, NULL, &instance) == VK_SUCCESS, "Create Vulkan Instance");
 	PFN_vkCreateDebugUtilsMessengerEXT createMessenger =
 	 (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -416,7 +417,6 @@ void createLogicalDevice()
 	deviceFeatures.sampleRateShading = VK_TRUE;
 	deviceFeatures.fillModeNonSolid = VK_TRUE;
 
-	
 	const char *extensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	uint32_t extensionCount = sizeof(extensionNames) / sizeof(extensionNames[0]);
 
@@ -527,7 +527,7 @@ void createSwapchain()
 	swapchainFormat = surfaceFormat.format;
 	swapchainExtent.width = width;
 	swapchainExtent.height = height;
-	
+
 	VkSwapchainCreateInfoKHR swapchainInfo = {};
 	swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapchainInfo.surface = surface;
