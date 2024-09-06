@@ -8,9 +8,13 @@
 #include <limits.h>
 #include <unistd.h>
 #include <sys/mman.h>
+//#include <vulkan/vulkan_core.h>
 
+//#define GLFW_EXPOSE_NATIVE_WAYLAND
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+//#include <GLFW/glfw3native.h>
+//#include <vulkan/vulkan_wayland.h>
 
 #define STBI_ASSERT(x)
 #define STB_IMAGE_IMPLEMENTATION
@@ -147,7 +151,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL messageCallback(
 
 void createInstance()
 {
-	uint32_t extensionCount;
+	glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+	glfwInit();
+
+	printlog(GLFW_TRUE, "GLFW initialized with %s platform support", glfwGetPlatform() == GLFW_PLATFORM_WAYLAND ? "Wayland" : "X11");
+
+	uint32_t extensionCount = 0;
 	const char **extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
 	const char *extensionNames[extensionCount + 1];
 	memcpy(extensionNames, extensions, extensionCount * sizeof(char*));
@@ -286,6 +295,17 @@ void createSurface()
 	glfwSetKeyCallback(window, keyEvent);
 	glfwSetCursorPosCallback(window, mouseEvent);
 	glfwSetFramebufferSizeCallback(window, resizeEvent);
+/*
+	struct wl_display *displayHandle = glfwGetWaylandDisplay();
+	struct wl_surface *surfaceHandle = glfwGetWaylandWindow(window);
+
+	VkWaylandSurfaceCreateInfoKHR surfaceInfo = {};
+	surfaceInfo.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+	surfaceInfo.display = displayHandle;
+	surfaceInfo.surface = surfaceHandle;
+
+	printlog(vkCreateWaylandSurfaceKHR(instance, &surfaceInfo, NULL, &surface) == VK_SUCCESS, "Create GLFW Vulkan Surface");
+*/
 	printlog(glfwCreateWindowSurface(instance, window, NULL, &surface) == VK_SUCCESS, "Create GLFW Vulkan Surface");
 }
 
@@ -1602,7 +1622,6 @@ void recreateSwapchain()
 
 void setup()
 {
-	glfwInit();
 	createInstance();
 	createSurface();
 	pickPhysicalDevice();
