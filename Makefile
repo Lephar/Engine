@@ -1,6 +1,7 @@
 CC = clang
 SLC = glslc
 CFLAGS = -std=gnu17 -march=native -mtune=native -O2 -Wall -Wextra
+#CFLAGS = -std=gnu17 -Og -g3 -Wall -Wextra
 LDLIBS = -lm -lglfw -lvulkan
 SOURCES = engine.c
 VSHADES = shaders/shader.vert
